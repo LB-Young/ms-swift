@@ -1,6 +1,7 @@
 # ms-swift WSL 两卡训练实验（experiments）
 
 > 2026-10-18 搭建与验证记录。目的：验证 ms-swift 在 WSL2 双卡环境下 SFT、RL（DPO）、RL（GRPO）流程可端到端训练。
+> 2026-11-05 追加：多模态（图文）CPT 流程（Qwen2-VL-2B + mock 图文 CPT 集）验证通过。
 
 ## 1. 环境
 
@@ -9,8 +10,10 @@
 | WSL 发行版 | Ubuntu-24.04（WSL2，`D:\WSL\Ubuntu-24.04\ext4.vhdx`） |
 | conda | `/opt/miniconda3`（conda 26.7.1） |
 | 环境 | `ms-swift`（Python 3.12.15） |
-| torch | 2.14.0（cuda134，conda-forge 预编译，支持 sm_120） |
+| torch | 2.14.1（cuda134，conda-forge 预编译，支持 sm_120） |
 | flash-attn | 2.8.3（pkgs/main 预编译） |
+| torchvision | 0.29.2+cu134（VLM 训练必需，pip `--no-deps` 装，未动 torch） |
+| qwen_vl_utils / decord | 0.0.14 / 0.6.0（Qwen2-VL 图像预处理依赖） |
 | ms-swift | 4.7.0.dev0（`pip install -e /root/ms-swift`） |
 | math_verify | 0.9.0（GRPO accuracy reward 依赖） |
 | GPU | 2× RTX 5060 Ti 16GB（sm_120） |
@@ -25,6 +28,7 @@
 | RL 原始 | `zhihu_rlhf_3k/zhihu_3k_rlfh.tsv` | 中文知乎 preference，3772 行 |
 | RL 转换 | `zhihu_rlhf_3k/zhihu_3k_rlfh_dpo.jsonl` | tsv→jsonl（messages/response/rejected_response 标准 DPO 格式） |
 | RL 数学 | `gsm8k/` | GRPO 数学数据集（modelscope 加载脚本 + ms-swift 云端拉取） |
+| 多模态 CPT | `mock_vl_cpt/`（mock 生成） | 64+8 条图文对：matplotlib 合成图表/示意图（72 张 512px）+ 每图配 250~450 字中文描述；`make_mock_vl_cpt.py` 可复现 |
 
 > ⚠️ zhihu_rlhf_3k 的 chosen/rejected 回答超长，直接用于 DPO 会出现 `logits/chosen=nan` 且 OOM；**改用 ms-swift 注册表官方数据集 `swift/orca_dpo_pairs` 后训练完全正常**。zhihu 数据保留作参考。
 
@@ -38,6 +42,8 @@
 - `sft_ds_zero2_2gpu.sh`：两卡 **DeepSpeed ZeRO-2** SFT（`--deepspeed zero2`，LoRA）
 - `rl_grpo_ds_2gpu.sh`：两卡 **DeepSpeed ZeRO-2** GRPO
 - `sft_ds_autotp_2gpu.sh`：两卡 **DeepSpeed AutoTP 张量并行** SFT（`--deepspeed_autotp_size 2`，full 微调）
+- `cpt_vl_2gpu.sh`：两卡 **多模态 CPT**（Qwen2-VL-2B-Instruct + mock 图文集；`swift pt` + `--use_chat_template false --loss_scale all`，LoRA，冻结 ViT/aligner）
+- `cpt_vl_infer.sh`：用 CPT 后的 LoRA adapter 对验证集做推理（`swift infer --adapters <ckpt>`）
 
 多卡写法：`NPROC_PER_NODE=2` + `CUDA_VISIBLE_DEVICES=0,1` 环境变量 + `swift sft / swift rlhf`（DDP）；不设 NPROC_PER_NODE + `--device_map auto`（模型并行）。
 
@@ -56,6 +62,7 @@
 | SFT 4B 单卡 DS ZeRO-2 (LoRA) | ✅ 10/10 步，train_loss 2.12，8.54GB；checkpoint-10 已存 |
 | SFT 4B 双卡 DS ZeRO-2 (LoRA) | ✅ 20/20 步，train_loss 1.725，9.53GB/卡；checkpoint-20 已存（WSL 扩容 24GB 后跑通） |
 | 4B ZeRO 矩阵（nods/zero0/1/2/3） | ✅ 5 策略全跑通 10/10 步，loss 2.18~2.22，8.5~8.8GB；纯 DDP 最快 16.9s，zero3 最慢 152s；offload×2 因 CPUAdam 需 nvcc 失败 |
+| 多模态 CPT（Qwen2-VL-2B + 图文集） | ✅ 16/16 步，train_loss 2.86→**1.95**，train_loss 均值 2.151，eval_loss 1.956，token_acc 0.44→0.60，**5.24GB/卡**，22s；推理 8/8 张图，图表数值/占比与 GT 高度一致 |
 
 产物目录：`experiments/output/sft/`、`experiments/output/rl_dpo/`（v5 为最终成功版本）、`experiments/output/rl_grpo/`（v2 为最终成功版本）、`experiments/output/sft_tp/`。
 
@@ -70,6 +77,9 @@
 7. **GRPO 列映射**：`MathAccuracy` reward 强制要求数据的 `solution` 列。gsm8k 原始列是 question/answer，需 `--disable_auto_column_mapping true --columns '{"question": "query", "answer": "solution"}'`。
 8. **`swift --help`** 有 KeyError 小 bug，不影响子命令（`swift sft --help` 等正常）。
 9. **nvcc 冲突**：本路线全用预编译 wheel（torch/flash-attn/vllm），无需 Linux nvcc，规避了 verl 时代的多卡编译冲突。
+10. **没有 `cpt` 子命令**：ms-swift 4.x CLI 只有 `pt`（预训练）；CPT 就用 `swift pt`。源码里 `SwiftPretrain` 直接继承 `SwiftSft`，`PretrainArguments` 只覆盖两个默认值：`use_chat_template=False`、`loss_scale='all'`（全 token 算 loss）——即「SFT 流水线 + 全 token loss」。因此多模态 CPT = VLM + 图文数据集 + `swift pt`，无需另找多模态专用入口。
+11. **参数名是 `--tuner_type` 不是 `--train_type`**：4.7 版 argparse 里没有 train_type，写错会报 `ValueError: remaining_argv: ['--train_type', 'lora']`（脚本第一次跑就是这样失败的）。
+12. **VLM 训练缺依赖链**：Qwen2-VL 需要 `qwen_vl_utils>=0.0.6` + `decord`；而 `qwen_vl_utils` 又依赖 **torchvision**（纯文本 SFT 用不到，所以之前没装）。torchvision 必须匹配 torch 2.14.1+cuda13.4 → 用 `pip install "torchvision==0.29.2+cu134" --index-url https://download.pytorch.org/whl/cu134 --no-deps`，**不要**走 conda solver（会动 pytorch，踩过坑）。
 
 ## 6. 日常使用
 
@@ -80,4 +90,5 @@ cd /root/ms-swift
 bash experiments/sft_2gpu.sh      # SFT
 bash experiments/rl_dpo_2gpu.sh   # RL DPO
 bash experiments/rl_grpo_2gpu.sh  # RL GRPO
+bash experiments/cpt_vl_2gpu.sh   # 多模态 CPT（Qwen2-VL-2B + mock 图文集）
 ```

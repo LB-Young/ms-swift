@@ -140,6 +140,7 @@ my_model/
 /data
 result/
 images
+!experiments/datasets/*/images/
 /custom/
 megatron_output/
 /*-mcore/
