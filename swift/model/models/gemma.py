@@ -195,21 +195,6 @@ register_model(
         requires=['transformers>=4.53.1'],
     ))
 
-
-class EmbeddingGemma2Loader(ModelLoader):
-
-    def get_config(self, model_dir: str):
-        self.attn_impl = self.attn_impl or 'eager'
-        return super().get_config(model_dir)
-
-    def get_model(self, model_dir: str, config, processor, model_kwargs) -> PreTrainedModel:
-        from transformers import AutoModel
-        self.auto_model_cls = self.auto_model_cls or AutoModel
-        model = super().get_model(model_dir, config, processor, model_kwargs)
-        _patch_gemma2_forward(model)
-        return model
-
-
 register_model(
     ModelMeta(
         LLMModelType.gemma_emb,
@@ -222,42 +207,6 @@ register_model(
         template=TemplateType.dummy,
         architectures=['Gemma3TextModel'],
     ))
-
-register_model(
-    ModelMeta(
-        LLMModelType.gemma2_emb,
-        [
-            ModelGroup([
-                Model('google/embeddinggemma-2', 'google/embeddinggemma-2'),
-            ]),
-        ],
-        EmbeddingGemma2Loader,
-        template=TemplateType.dummy,
-        architectures=['EmbeddingGemma2Model'],
-        requires=['transformers>=5.20'],
-        tags=['embedding', 'vision', 'audio'],
-    ))
-
-
-def _patch_gemma2_forward(model):
-    if hasattr(model, 'origin_forward'):
-        return
-    model.origin_forward = model.forward
-
-    def forward(self, input_ids=None, attention_mask=None, **kwargs):
-        output = self.origin_forward(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
-        hidden_states = output.last_hidden_state  # [batch, seq_len, embedding_dim]
-        # mean pooling
-        if attention_mask is not None:
-            mask = attention_mask.unsqueeze(-1).to(hidden_states.dtype)
-            embeddings = (hidden_states * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
-        else:
-            embeddings = hidden_states.mean(dim=1)
-        # L2 normalise
-        embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
-        return {'last_hidden_state': embeddings.contiguous()}
-
-    model.forward = MethodType(forward, model)
 
 
 def _patch_gemma4_forward(model, processor, is_gemma4_unified: bool = False):
@@ -299,6 +248,7 @@ def _patch_gemma4_forward(model, processor, is_gemma4_unified: bool = False):
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
         per_layer_inputs: torch.Tensor | None = None,
+        mm_encoder_outputs: dict | None = None,
         **kwargs,
     ) -> Gemma4ModelOutputWithPast:
         r"""
@@ -342,9 +292,30 @@ def _patch_gemma4_forward(model, processor, is_gemma4_unified: bool = False):
         if pixel_values is None and pixel_values_videos is None and has_image:
             inputs_embeds = _forward_dummy_image(self, inputs_embeds)
 
+        # transformers>=5.19 generate() pre-encodes multimodal inputs into mm_encoder_outputs;
+        # consume them when pixel_values is not passed (training still passes pixel_values directly).
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if pixel_values is None and mm_encoder_outputs.get('image') is not None:
+            image_features = torch.cat(mm_encoder_outputs['image'].pooler_output, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+
+            n_image_tokens = image_mask.sum()
+            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            torch_compilable_check(
+                inputs_embeds[image_mask].numel() == image_features.numel(),
+                f'Image features and image tokens do not match, tokens: {n_image_tokens}, features:'
+                f' {image_features.shape[0]}',
+            )
+
+            inputs_embeds = inputs_embeds.masked_scatter(
+                image_mask.to(inputs_embeds.device), image_features.to(inputs_embeds.device))
+
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
+            if isinstance(image_features, (tuple, list)):
+                # transformers>=5.19 returns per-image tensors (split of the pooled features)
+                image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
@@ -359,9 +330,26 @@ def _patch_gemma4_forward(model, processor, is_gemma4_unified: bool = False):
             inputs_embeds = inputs_embeds.masked_scatter(
                 image_mask.to(inputs_embeds.device), image_features.to(inputs_embeds.device))
 
+        if pixel_values_videos is None and mm_encoder_outputs.get('video') is not None:
+            video_features = torch.cat(mm_encoder_outputs['video'].pooler_output, dim=0)
+            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+
+            n_video_tokens = video_mask.sum()
+            video_mask = video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            torch_compilable_check(
+                inputs_embeds[video_mask].numel() == video_features.numel(),
+                f'Video features and video tokens do not match, tokens: {n_video_tokens}, features:'
+                f' {video_features.shape[0]}',
+            )
+
+            inputs_embeds = inputs_embeds.masked_scatter(
+                video_mask.to(inputs_embeds.device), video_features.to(inputs_embeds.device))
+
         if pixel_values_videos is not None:
             video_features = self.get_video_features(
                 pixel_values_videos, video_position_ids, return_dict=True).pooler_output
+            if isinstance(video_features, (tuple, list)):
+                video_features = torch.cat(video_features, dim=0)
             video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.

@@ -63,6 +63,7 @@
 | SFT 4B 双卡 DS ZeRO-2 (LoRA) | ✅ 20/20 步，train_loss 1.725，9.53GB/卡；checkpoint-20 已存（WSL 扩容 24GB 后跑通） |
 | 4B ZeRO 矩阵（nods/zero0/1/2/3） | ✅ 5 策略全跑通 10/10 步，loss 2.18~2.22，8.5~8.8GB；纯 DDP 最快 16.9s，zero3 最慢 152s；offload×2 因 CPUAdam 需 nvcc 失败 |
 | 多模态 CPT（Qwen2-VL-2B + 图文集） | ✅ 16/16 步，train_loss 2.86→**1.95**，train_loss 均值 2.151，eval_loss 1.956，token_acc 0.44→0.60，**5.24GB/卡**，22s；推理 8/8 张图，图表数值/占比与 GT 高度一致 |
+| 多模态 CPT（Gemma4-E2B + 图文集，单卡） | ✅ 16/16 步，train_loss 3.685，**10.75GiB**，30.6s（2.09 samples/s）；推理 8/8 张图全部正确识别并描述（图表类型/数值/布局与图像一致）；双卡在 WSL 下受 `device not ready`（GPU mapping）限制无法跑 |
 
 产物目录：`experiments/output/sft/`、`experiments/output/rl_dpo/`（v5 为最终成功版本）、`experiments/output/rl_grpo/`（v2 为最终成功版本）、`experiments/output/sft_tp/`。
 
@@ -80,6 +81,9 @@
 10. **没有 `cpt` 子命令**：ms-swift 4.x CLI 只有 `pt`（预训练）；CPT 就用 `swift pt`。源码里 `SwiftPretrain` 直接继承 `SwiftSft`，`PretrainArguments` 只覆盖两个默认值：`use_chat_template=False`、`loss_scale='all'`（全 token 算 loss）——即「SFT 流水线 + 全 token loss」。因此多模态 CPT = VLM + 图文数据集 + `swift pt`，无需另找多模态专用入口。
 11. **参数名是 `--tuner_type` 不是 `--train_type`**：4.7 版 argparse 里没有 train_type，写错会报 `ValueError: remaining_argv: ['--train_type', 'lora']`（脚本第一次跑就是这样失败的）。
 12. **VLM 训练缺依赖链**：Qwen2-VL 需要 `qwen_vl_utils>=0.0.6` + `decord`；而 `qwen_vl_utils` 又依赖 **torchvision**（纯文本 SFT 用不到，所以之前没装）。torchvision 必须匹配 torch 2.14.1+cuda13.4 → 用 `pip install "torchvision==0.29.2+cu134" --index-url https://download.pytorch.org/whl/cu134 --no-deps`，**不要**走 conda solver（会动 pytorch，踩过坑）。
+13. **Gemma4 数据占位符必须用标准 `<image>`**：预写成 `<|image|>` 会导致 image token 双计（模板 replace_tag 会再插一次），`gemma.py:309` 报 `IndexError: list index out of range` → 全样本 encode 失败。单张 512px 图 = 256 个 image token(258880)，pixel_values shape `(1, 2520, 768)`，整条样本 encode 452 token。
+14. **transformers 5.19 的 Gemma4 `get_image_features().pooler_output` 是 tuple**（按图 split），旧版是单 tensor。ms-swift patch 当 tensor 用会报 `AttributeError: 'tuple' object has no attribute 'to'`。已在 `swift/model/models/gemma.py` image/video 两处补 `torch.cat(..., dim=0)`。
+15. **推理 generate 丢图（最隐蔽）**：transformers 5.19 的 `generate()` 会在首步把 `pixel_values` 预编码成 `mm_encoder_outputs` 再传 forward，而 ms-swift 的 Gemma4 patch 只认 `pixel_values` → 走"假图"分支，模型回答"请提供图片"（训练不受影响，因为训练直接 forward 传 pixel_values）。修复：`swift/model/models/gemma.py` 的 patch forward 增加 `mm_encoder_outputs` 参数并消费 `mm_encoder_outputs['image'/'video'].pooler_output`（torch.cat 后 masked_scatter 注入）。修复后 `swift infer` / 自定义 `model.generate` 均正常识图。
 
 ## 6. 日常使用
 
@@ -91,4 +95,6 @@ bash experiments/sft_2gpu.sh      # SFT
 bash experiments/rl_dpo_2gpu.sh   # RL DPO
 bash experiments/rl_grpo_2gpu.sh  # RL GRPO
 bash experiments/cpt_vl_2gpu.sh   # 多模态 CPT（Qwen2-VL-2B + mock 图文集）
+bash experiments/cpt_gemma4_1gpu.sh   # 多模态 CPT（Gemma4-E2B，单卡，mock 图文集）
+# 推理（含图像）见 experiments/infer_gemma4.py；需先应用 gemma.py 源码 patch（坑 14/15）
 ```
