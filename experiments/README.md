@@ -96,5 +96,10 @@ bash experiments/rl_dpo_2gpu.sh   # RL DPO
 bash experiments/rl_grpo_2gpu.sh  # RL GRPO
 bash experiments/cpt_vl_2gpu.sh   # 多模态 CPT（Qwen2-VL-2B + mock 图文集）
 bash experiments/cpt_gemma4_1gpu.sh   # 多模态 CPT（Gemma4-E2B，单卡，mock 图文集）
-# 推理（含图像）见 experiments/infer_gemma4.py；需先应用 gemma.py 源码 patch（坑 14/15）
+# 推理（含图像）见 experiments/infer_gemma4.py；需先应用 gemma.py 适配层补丁（坑 14/15，transformers 安装包未改）
+
+# 纯 transformers 加载 Gemma4（不走 ms-swift，默认只用 1 号卡，进程内看不到 0 号卡）
+python experiments/gemma4_hf_runner.py --image experiments/datasets/mock_vl_cpt/images/bar_00.png \
+    --question 请详细描述这张图片的内容
+# 自定义：--gpu N 指定卡号，--model 指定模型路径，--max_new_tokens 控制长度
 ```
