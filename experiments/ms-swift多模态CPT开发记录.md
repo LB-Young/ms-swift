@@ -112,19 +112,19 @@ swift pt \
 - 解决：删掉 `gemma4_cpt_train/val.jsonl`，脚本直接指回标准 tag 的 `cpt_train.jsonl / cpt_val.jsonl`。
 - 附带教训：`--use_chat_template true` 不是根因，改它没用；真正的问题是数据 tag。
 
-### 2.3 训练启动与源码修复
+### 2.3 训练启动与适配层修复（改的是 ms-swift，不是 transformers）
 
 **坑 4：transformers 5.19 的 pooler_output 是 tuple**
 
 - 现象：encode 通过后，训练第一轮 forward 崩：`AttributeError: 'tuple' object has no attribute 'to'` at `swift/model/models/gemma.py:297`。
 - 根因：transformers 5.19 的 `Gemma4ForConditionalGeneration.get_image_features().pooler_output` **按图 split 成 tuple**（旧版 5.6.2 是单个 tensor），ms-swift 的 patch 当 tensor 用。
-- 解决：改源码 `/root/ms-swift/swift/model/models/gemma.py`，image/video 两处加：
+- 解决：改 **ms-swift 自己的适配层代码** `/root/ms-swift/swift/model/models/gemma.py`（`_patch_gemma4_forward` 内部），image/video 两处加：
   ```python
   if isinstance(image_features, (tuple, list)):
       image_features = torch.cat(image_features, dim=0)
   ```
   （video 同理）
-- 这是**源码改动**，最终同步进了 E 盘 fork 仓库。
+- 注意：**没有改 transformers 安装包**。transformers 自带的 `Gemma4Model.forward` 本来就正确处理 tuple；是 ms-swift 在加载模型时用 `_patch_gemma4_forward` 整段替换了这个 forward，被替换的那份代码写于 transformers 5.6.x 时代，接口没跟上 5.19。所以要补的是 ms-swift 这一层。改动最终同步进了 E 盘 fork 仓库。
 
 **坑 5：双卡在 WSL 下崩（环境限制，放弃双卡）**
 
@@ -171,7 +171,7 @@ swift pt \
 
 （训练不受影响，因为训练直接 `model(**inputs)` 走 pixel_values 分支。）
 
-**解决**：给 `swift/model/models/gemma.py` 的 patch forward 增加 `mm_encoder_outputs` 参数并消费：
+**解决**：给 `swift/model/models/gemma.py` 的 patch forward（同样的 ms-swift 适配层，transformers 未动）增加 `mm_encoder_outputs` 参数并消费：
 
 ```python
 mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
@@ -186,7 +186,24 @@ if pixel_values is None and mm_encoder_outputs.get('image') is not None:
 - 自定义推理脚本 `experiments/infer_gemma4.py`（encode → collate → generate）8/8 全过：柱状图数值、折线图趋势、饼图占比、散点图关系、流程图步骤、要点卡内容、草图布局全部与图像一致。
 - `swift infer` CLI 链路同样恢复正常（同一条路径）。
 
-**为什么自定义脚本而不修 engine**：`TransformersEngine.infer` 的丢图是同一根因（generate 首步 mm_encoder_outputs），修好源码 patch 后 engine 路径也通；自定义脚本作为确定性复现和验收手段保留。
+**为什么自定义脚本而不修 engine**：`TransformersEngine.infer` 的丢图是同一根因（generate 首步 mm_encoder_outputs），修好 ms-swift 适配层 patch 后 engine 路径也通；自定义脚本作为确定性复现和验收手段保留。
+
+### 2.6 修复边界：改的是 ms-swift 适配层，不是 transformers
+
+这一点容易被误解，单独说明：
+
+- **transformers 安装包一行未改**。验证方式是对比文件修改时间：
+
+  ```
+  /opt/miniconda3/envs/ms-swift/lib/python3.12/site-packages/transformers/models/gemma4/modeling_gemma4.py
+    → 2026-10-18 20:55（pip 安装时刻，之后从未变动）
+  /root/ms-swift/swift/model/models/gemma.py
+    → 2026-11-05 23:27（本次修改）
+  ```
+
+- **为什么改 ms-swift 就够**：transformers 5.19 原生的 `Gemma4Model.forward` 本身已正确处理新接口（源码里就是 `mm_encoder_outputs.get("image")` → `torch.cat(pooler_output)` → `masked_scatter`）。问题在于 ms-swift 加载模型时用 `_patch_gemma4_forward` **整段替换**了该 forward，替换代码停留在 5.6.x 写法。源头（transformers）是对的，坏的是被替换进去的那份副本。
+- **为什么这样更稳**：把补丁放在 ms-swift 层，`pip install -U transformers` / 重装环境都不会静默冲掉它。反之直接改 `site-packages` 下的文件，下次升级 transformers 就被覆盖，且难以追溯。
+- **代价**：这是本地 fork 的改动，ms-swift 上游升级时需要重新确认 `gemma.py` 的补丁是否已被官方修复，避免重复打补丁。已记录在 `experiments/README.md` 坑 14/15。
 
 ---
 
@@ -194,7 +211,7 @@ if pixel_values is None and mm_encoder_outputs.get('image') is not None:
 
 1. **CPT = `swift pt`**：别找 `cpt` 命令，本质是 SFT 流水线 + `loss_scale=all` 全 token loss。
 2. **占位符用模板默认 tag**：数据里写什么 tag，要对照模板 `replace_tag` 的行为，写错会静默双计或索引越界；先做单条 encode 冒烟（数 image token 数）再跑全量。
-3. **transformers 大版本升级会改多模态接口**：5.19 把 `pooler_output` 变 tuple、`generate` 引入 `mm_encoder_outputs`，ms-swift 的 patch 没跟上就会出"训练正常、推理丢图"这类最隐蔽的 bug。
+3. **transformers 大版本升级会改多模态接口**：5.19 把 `pooler_output` 变 tuple、`generate` 引入 `mm_encoder_outputs`。ms-swift 用 monkey-patch 覆盖了模型 forward，patch 没跟上新接口时**不报错、只静默丢图**（训练正常、推理退化）。修复要补在 ms-swift 适配层，**不要去改 transformers 安装包**（下次 pip 升级就会被覆盖）。
 4. **推理丢图先做 A/B 实验**：同一输入两张不同图对比 logits，能秒级区分"模型没能力"和"图没进模型"两个完全不同的方向。
 5. **手动 generate 的"正确输出"可能是 decode 了输入 GT**：encode 时务必剔除 assistant 消息再推理。
 6. **WSL 多卡大模型有限制**：9.6G 模型双卡在 WSL 下 `Failed to create GPU mapping`，与显存无关；单卡可稳定跑。
@@ -211,11 +228,11 @@ if pixel_values is None and mm_encoder_outputs.get('image') is not None:
 | `experiments/cpt_vl_infer.sh` | Qwen 版 adapter 推理 |
 | `experiments/cpt_gemma4_1gpu.sh` | Gemma4-E2B 单卡 CPT（已跑通） |
 | `experiments/cpt_gemma4_2gpu.sh` | Gemma4 双卡脚本（WSL 限制，未跑通，留档） |
-| `experiments/cpt_gemma4_infer.sh` | Gemma4 CLI 推理（修复源码 patch 后可用） |
+| `experiments/cpt_gemma4_infer.sh` | Gemma4 CLI 推理（ms-swift 适配层补丁修复后可用） |
 | `experiments/infer_gemma4.py` | Gemma4 确定性推理脚本（8/8 验收） |
-| `swift/model/models/gemma.py` | 源码 patch：pooler tuple + mm_encoder_outputs（坑 4/5 的修复） |
+| `swift/model/models/gemma.py` | **ms-swift 适配层补丁**（transformers 未改）：pooler tuple + mm_encoder_outputs（坑 4/5 的修复） |
 | `experiments/README.md` | 结果表 + 踩坑 13/14/15 |
 
 提交记录：
 - `1877ee85d` — Qwen2-VL-2B 图文 CPT（80 files）
-- `db2991cc7` — Gemma4-E2B 图文 CPT + gemma.py 源码 patch（7 files, +212/-51）
+- `db2991cc7` — Gemma4-E2B 图文 CPT + ms-swift gemma.py 适配补丁（7 files, +212/-51）
