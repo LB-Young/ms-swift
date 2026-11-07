@@ -97,7 +97,7 @@ experiments/
 
 ### 3.4 infer/（5 个，推理与调试）
 
-- `infer/gemma4_official_demo.py`：**按 ModelScope 官方模型卡样例**调用 Gemma4（modelscope `AutoProcessor` + `AutoModelForMultimodalLM`，图文/纯文本两种模式，含 `parse_response` 解析）
+- `infer/gemma4_official_demo.py`：**按 ModelScope 官方模型卡样例**调用 Gemma4（modelscope `AutoProcessor` + `AutoModelForMultimodalLM`，图文/纯文本两种模式，含 `parse_response` 解析）；卡号/模型/图片/模式/最大 token 全部写成脚本头常量，`python` 直接跑，不需要命令行参数
 - `infer/infer_gemma4.py`：Gemma4 确定性推理验收脚本（encode → collate → generate，8/8 通过）
 - `infer/gemma4_hf_runner.py`：**纯 transformers** 版 Gemma4 推理（类封装，`CUDA_VISIBLE_DEVICES` 锁定 1 号卡）
 - `infer/gemma4_hf_simple.py`：24 行极简版（同样只用 1 号卡）
@@ -172,5 +172,5 @@ python experiments/infer/gemma4_hf_runner.py --image <path>   # 换成别的图
 python experiments/infer/gemma4_hf_runner.py --no_image       # 纯文本，不带图
 python experiments/infer/gemma4_hf_simple.py  # 极简版，同样默认用内置图
 python experiments/infer/repro_gemma4_image_drop.py   # 复现丢图（A/B/C 对照）
-python experiments/infer/gemma4_official_demo.py      # ModelScope 官方样例；--mode text 纯文本，--thinking 开思考
+python experiments/infer/gemma4_official_demo.py      # ModelScope 官方样例；图片/文本/思考开关都改脚本头常量，无需参数
 ```
