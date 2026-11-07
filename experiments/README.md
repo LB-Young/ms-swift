@@ -75,6 +75,11 @@ experiments/
 
 差别就三点：PT 是连续语料、没有 role；CPT 是图文对，content 里用**标准 `<image>`**（不能写 `<|image|>`，会双计）占位、`images` 给绝对路径；两者共用 `swift pt`，都用全 token loss。
 
+两点容易混淆的地方：
+
+- **纯文本 CPT 与 PT 完全同构**：都用 `{"text": ...}`，没有 role、不套模板。写成 `messages` 只发生在**图文**场景——一段 text 放不下"图插在序列的哪个位置"。ms-swift 承载图文交错序列的结构就是 `messages` + `images`，其自带的经典多模态预训练集 LLaVA-Pretrain 正是这种格式（`swift/dataset/dataset/mllm.py:1011` 的 `LLaVAPretrainPreprocessor` 继承 `MessagesPreprocessor`，user="请描述这张图"、assistant=caption）。
+- **图文 CPT 用 messages 也不算 SFT**，判据不是外壳而是 loss 覆盖范围：SFT 默认 `loss_scale=default`，只算 assistant 段（`swift/arguments/base_args/template_args.py:140`）；PT/CPT 用 `loss_scale=all`，user 段、caption、模板标记全部算 loss（`swift/arguments/pretrain_args.py:10` 默认即 `all`）。代价是 messages 路径一定带 role 标记 token（`swift/template/base.py:1444-1449` 强制按 user/assistant 成对解析），纯语言语料走 `text` 字段才能做到零标记。
+
 > ⚠️ zhihu_rlhf_3k 的 chosen/rejected 回答超长，直接用于 DPO 会出现 `logits/chosen=nan` 且 OOM；**改用 ms-swift 注册表官方数据集 `swift/orca_dpo_pairs` 后训练完全正常**。zhihu 数据保留作参考。
 
 ## 3. 脚本（按目录分类）
