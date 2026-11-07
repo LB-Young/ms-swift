@@ -1,5 +1,7 @@
 # ms-swift 两卡训练 · 快速上手（只写正确流程，照抄即可跑通）
 
+> 📁 目录说明（2026-11-07）：本文档已移至 `experiments/docs/`。文中提到的 `experiments/*.sh`、`experiments/*.py` 现已归类到 `experiments/sft|rl|cpt|infer/` 子目录，路径映射见 `experiments/README.md`。
+
 > 环境：WSL Ubuntu-24.04 + 2×RTX 5060 Ti（sm_120）｜conda env：`ms-swift`｜模型：`/mnt/e/models/models/Qwen/Qwen3-0___6B`
 > 本文只列可执行命令与预期结果；踩坑细节见《ms-swift安装到训练全流程记录.md》。
 

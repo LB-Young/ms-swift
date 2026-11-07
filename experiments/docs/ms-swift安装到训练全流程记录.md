@@ -1,5 +1,7 @@
 # ms-swift WSL 两卡训练：从环境搭建到 SFT / DPO / GRPO 全部跑通（完整记录）
 
+> 📁 目录说明（2026-11-07）：本文档已移至 `experiments/docs/`。文中提到的 `experiments/*.sh`、`experiments/*.py` 现已归类到 `experiments/sft|rl|cpt|infer/` 子目录，路径映射见 `experiments/README.md`。
+
 > 日期：2026-10-18
 > 机器：2× NVIDIA GeForce RTX 5060 Ti 16GB（Blackwell，sm_120）+ WSL2（Ubuntu-24.04）
 > 目的：在 WSL 中为 ms-swift 搭建 conda 环境，从 ModelScope 下载数据集，编写并跑通 **SFT、DPO（RL）、GRPO（RL）** 三个两卡训练脚本。

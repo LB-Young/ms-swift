@@ -1,5 +1,7 @@
 # ms-swift 多模态图文 CPT 开发记录（Qwen2-VL-2B / Gemma4-E2B）
 
+> 📁 目录说明（2026-11-07）：本文档已移至 `experiments/docs/`。文中提到的 `experiments/*.sh`、`experiments/*.py` 现已归类到 `experiments/sft|rl|cpt|infer/` 子目录，路径映射见 `experiments/README.md`。
+
 > 环境：WSL Ubuntu-24.04 + conda env `ms-swift`（Python 3.12），2×RTX 5060 Ti 16GB（sm_120）
 > 版本：torch 2.14.1 / CUDA 13.4 / flash-attn 2.8.3 / transformers 5.19.0 / ms-swift 4.7.0.dev0（源码安装）
 > 模型（E 盘本地，禁止下载）：`/mnt/e/models/qwen/Qwen2-VL-2B-Instruct`、`/mnt/e/models/model/gemma-4-E2B-it`

@@ -1,7 +1,7 @@
 #!/bin/bash
-cd /root/ms-swift/experiments || exit 1
+cd "$(dirname "$0")/.." || exit 1   # 回到 experiments，保持 output/logs 相对路径语义
 mkdir -p logs output
-setsid bash cpt_gemma4_2gpu.sh > logs/cpt_gemma4_2gpu_wrapper.log 2>&1 &
+setsid bash cpt/cpt_gemma4_2gpu.sh > logs/cpt_gemma4_2gpu_wrapper.log 2>&1 &
 echo "pid=$!"
 sleep 8
 echo "=== alive? ==="

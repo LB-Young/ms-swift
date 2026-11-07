@@ -1,5 +1,7 @@
 # ms-swift 环境补丁记录（Megatron TP 跑通所必需）
 
+> 📁 目录说明（2026-11-07）：本文档已移至 `experiments/docs/`。文中提到的 `experiments/*.sh`、`experiments/*.py` 现已归类到 `experiments/sft|rl|cpt|infer/` 子目录，路径映射见 `experiments/README.md`。
+
 > 适用范围：`/opt/miniconda3/envs/ms-swift`（WSL Ubuntu-24.04，Python 3.12，torch 2.14.1 cuda134）
 > 这些补丁打在 **site-packages 内**（megatron-core 与 mcore-bridge 的 wheel 安装文件），不在 ms-swift 源码里。
 > 原因：本项目坚持"全预编译 wheel、零 nvcc 源码编译"路线；megatron-core 默认依赖 transformer-engine（需编译 CUDA 算子），在 2×RTX 5060 Ti (sm_120, Blackwell) 上无法编译，故彻底卸载 transformer-engine，改走 megatron-core 官方 `transformer_impl='local'` 原生算子，并对相关文件打补丁兜底。
