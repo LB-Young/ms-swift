@@ -17,7 +17,7 @@ experiments/
 ├── sft/                           # 文本 SFT（DDP / 模型并行 / Megatron TP / DeepSpeed ZeRO / 4B）
 ├── rl/                            # RL：DPO / GRPO（含 DeepSpeed 变体）
 ├── cpt/                           # 多模态 CPT（Qwen2-VL / Gemma4 + mock 数据生成 + start 包装）
-├── infer/                         # 推理与调试脚本（含丢图复现）
+├── infer/                         # 推理与调试脚本（含丢图复现、官方样例）
 ├── datasets/                      # 数据集（含 mock_vl_cpt）
 ├── logs/                          # 运行日志（不入库）
 └── output/                        # 训练产物（不入库）
@@ -95,8 +95,9 @@ experiments/
 - `cpt/cpt_gemma4_infer.sh`：Gemma4 CLI 推理（需 `swift/model/models/gemma.py` 适配层补丁，坑 14/15）
 - `cpt/start_cpt_vl.sh` / `cpt/start_cpt_gemma4.sh`：后台启动包装（setsid + 打印首屏日志）
 
-### 3.4 infer/（4 个，推理与调试）
+### 3.4 infer/（5 个，推理与调试）
 
+- `infer/gemma4_official_demo.py`：**按 ModelScope 官方模型卡样例**调用 Gemma4（modelscope `AutoProcessor` + `AutoModelForMultimodalLM`，图文/纯文本两种模式，含 `parse_response` 解析）
 - `infer/infer_gemma4.py`：Gemma4 确定性推理验收脚本（encode → collate → generate，8/8 通过）
 - `infer/gemma4_hf_runner.py`：**纯 transformers** 版 Gemma4 推理（类封装，`CUDA_VISIBLE_DEVICES` 锁定 1 号卡）
 - `infer/gemma4_hf_simple.py`：24 行极简版（同样只用 1 号卡）
@@ -123,6 +124,7 @@ experiments/
 | 多模态 CPT（Gemma4-E2B + 图文集，单卡） | ✅ 16/16 步，train_loss 3.685，**10.75GiB**，30.6s（2.09 samples/s）；推理 8/8 张图全部正确识别并描述（图表类型/数值/布局与图像一致）；双卡在 WSL 下受 `device not ready`（GPU mapping）限制无法跑 |
 | Gemma4 纯 transformers 推理 | ✅ 1 号卡跑通；bar_00 输出 48/76/106/84、pie_02 输出 13/31/38/18，与 mock GT 完全一致 |
 | Gemma4 纯 transformers 推理（内置架构图） | ✅ 不传 `--image` 直接读笔记里的 Gemma-1 解码层架构图，正确复述 `hidden states (b,s,2048)`、`RMSNorm eps 1e-6`、`q/k/v_proj 2048→8*256 / 1*256`、`RoPE`、`input layernorm` |
+| Gemma4 官方模型卡样例（modelscope API） | ✅ 1 号卡跑通（E2B 权重）；图文样例 prompt 274 token、生成 186 token / 7.5s，正确识别 GoldenGate 桥；纯文本样例 28 token → 28 token / 2.3s；`parse_response` 均返回 `{'role': 'assistant', 'content': ...}` |
 
 产物目录：`experiments/output/sft/`、`experiments/output/rl_dpo/`（v5 为最终成功版本）、`experiments/output/rl_grpo/`（v2 为最终成功版本）、`experiments/output/sft_tp/`、`experiments/output/cpt-gemma4-1gpu/`。
 
@@ -170,4 +172,5 @@ python experiments/infer/gemma4_hf_runner.py --image <path>   # 换成别的图
 python experiments/infer/gemma4_hf_runner.py --no_image       # 纯文本，不带图
 python experiments/infer/gemma4_hf_simple.py  # 极简版，同样默认用内置图
 python experiments/infer/repro_gemma4_image_drop.py   # 复现丢图（A/B/C 对照）
+python experiments/infer/gemma4_official_demo.py      # ModelScope 官方样例；--mode text 纯文本，--thinking 开思考
 ```
