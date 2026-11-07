@@ -14,6 +14,7 @@ experiments/
 │   ├── ms-swift快速上手.md
 │   ├── ms-swift多模态CPT开发记录.md
 │   └── megatron_patches_notes.md
+├── pt/                            # 纯文本预训练 demo（PT 数据格式：{"text": ...}）
 ├── sft/                           # 文本 SFT（DDP / 模型并行 / Megatron TP / DeepSpeed ZeRO / 4B）
 ├── rl/                            # RL：DPO / GRPO（含 DeepSpeed 变体）
 ├── cpt/                           # 多模态 CPT（Qwen2-VL / Gemma4 + mock 数据生成 + start 包装）
@@ -62,12 +63,27 @@ experiments/
 | RL 转换 | `zhihu_rlhf_3k/zhihu_3k_rlfh_dpo.jsonl` | tsv→jsonl（messages/response/rejected_response 标准 DPO 格式） |
 | RL 数学 | `gsm8k/` | GRPO 数学数据集（modelscope 加载脚本 + ms-swift 云端拉取） |
 | 多模态 CPT | `mock_vl_cpt/`（mock 生成） | 64+8 条图文对：matplotlib 合成图表/示意图（72 张 512px）+ 每图配 250~450 字中文描述；`cpt/make_mock_vl_cpt.py` 可复现 |
+| PT demo | `demo_pt_cpt/pt_{train,val}.jsonl`（mock） | 10+2 条纯文本语料，每行 `{"text": ...}`，内容取自本项目真实经验 |
+| CPT demo | `demo_pt_cpt/cpt_{train,val}.jsonl` + `images/`（mock） | 8+2 条图文对，图从 `mock_vl_cpt` 挑选复制，答案与图内容一致；`datasets/make_demo_pt_cpt.py` 可复现 |
+
+**PT 与 CPT 的数据格式差异**（`datasets/make_demo_pt_cpt.py` 生成）：
+
+| | 一行数据长什么样 | 训练命令 |
+|---|---|---|
+| PT（纯文本预训练） | `{"text": "Gemma 4 的 E2B 与 E4B 是同一代的两档模型……"}` | `swift pt --use_chat_template false --loss_scale all` |
+| CPT（多模态图文继续预训练） | `{"messages": [{"role":"user","content":"<image>请详细描述这张图片……"},{"role":"assistant","content":"这是一张柱状图……"}], "images": ["/root/ms-swift/experiments/datasets/demo_pt_cpt/images/bar_00.png"]}` | `swift pt --use_chat_template true --loss_scale all` |
+
+差别就三点：PT 是连续语料、没有 role；CPT 是图文对，content 里用**标准 `<image>`**（不能写 `<|image|>`，会双计）占位、`images` 给绝对路径；两者共用 `swift pt`，都用全 token loss。
 
 > ⚠️ zhihu_rlhf_3k 的 chosen/rejected 回答超长，直接用于 DPO 会出现 `logits/chosen=nan` 且 OOM；**改用 ms-swift 注册表官方数据集 `swift/orca_dpo_pairs` 后训练完全正常**。zhihu 数据保留作参考。
 
 ## 3. 脚本（按目录分类）
 
-### 3.1 sft/（13 个，文本 SFT）
+### 3.1 pt/（1 个，纯文本预训练 demo）
+
+- `pt/pt_text_demo.sh`：纯文本 PT 最小 demo（Qwen3-0.6B + `{"text": ...}` 语料；`--use_chat_template false --loss_scale all`，不套模板、全 token 算 loss）
+
+### 3.2 sft/（13 个，文本 SFT）
 
 - `sft/sft_2gpu.sh`：两卡 DDP SFT（LoRA，Qwen3-0.6B + alpaca-zh）
 - `sft/sft_tp_2gpu.sh`：两卡**模型并行** SFT（`--device_map auto`，单进程多卡）
@@ -79,14 +95,15 @@ experiments/
 - `sft/sft_4b_zero_matrix.sh`：4B ZeRO 矩阵对比（nods / zero0 / 1 / 2 / 3）
 - `sft/sft_4b_zero3_offload.sh`：ZeRO-3 + offload（CPUAdam 需 nvcc，**未跑通，留档**）
 
-### 3.2 rl/（3 个）
+### 3.3 rl/（3 个）
 
 - `rl/rl_dpo_2gpu.sh`：两卡 DDP DPO（LoRA，`swift/orca_dpo_pairs#500`）
 - `rl/rl_grpo_2gpu.sh`：两卡 DDP GRPO（LoRA，gsm8k + accuracy reward，native rollout）
 - `rl/rl_grpo_ds_2gpu.sh`：两卡 **DeepSpeed ZeRO-2** GRPO
 
-### 3.3 cpt/（8 个，多模态图文 CPT）
+### 3.4 cpt/（9 个，多模态图文 CPT）
 
+- `cpt/cpt_vl_demo.sh`：**最小可跑 demo**（Gemma4-E2B + 8 条 mock 图文，2 epoch / 8 步，10.3s，10.75 GiB；验证 `images` 字段与 `<image>` 占位）
 - `cpt/cpt_vl_2gpu.sh`：两卡多模态 CPT（Qwen2-VL-2B-Instruct + mock 图文集；`swift pt` + `--use_chat_template false --loss_scale all`，LoRA，冻结 ViT/aligner）
 - `cpt/cpt_vl_infer.sh`：Qwen 版 CPT adapter 推理（`swift infer --adapters <ckpt>`）
 - `cpt/make_mock_vl_cpt.py`：mock 图文集生成器（8 类图，64 训练 + 8 验证 = 72 张 512px PNG，同 seed 数值对齐）
@@ -95,7 +112,7 @@ experiments/
 - `cpt/cpt_gemma4_infer.sh`：Gemma4 CLI 推理（需 `swift/model/models/gemma.py` 适配层补丁，坑 14/15）
 - `cpt/start_cpt_vl.sh` / `cpt/start_cpt_gemma4.sh`：后台启动包装（setsid + 打印首屏日志）
 
-### 3.4 infer/（5 个，推理与调试）
+### 3.5 infer/（5 个，推理与调试）
 
 - `infer/gemma4_official_demo.py`：**按 ModelScope 官方模型卡样例**调用 Gemma4（modelscope `AutoProcessor` + `AutoModelForMultimodalLM`，图文/纯文本两种模式，含 `parse_response` 解析）；卡号/模型/图片/模式/最大 token 全部写成脚本头常量，`python` 直接跑，不需要命令行参数
 - `infer/infer_gemma4.py`：Gemma4 确定性推理验收脚本（encode → collate → generate，8/8 通过）
@@ -125,6 +142,8 @@ experiments/
 | Gemma4 纯 transformers 推理 | ✅ 1 号卡跑通；bar_00 输出 48/76/106/84、pie_02 输出 13/31/38/18，与 mock GT 完全一致 |
 | Gemma4 纯 transformers 推理（内置架构图） | ✅ 不传 `--image` 直接读笔记里的 Gemma-1 解码层架构图，正确复述 `hidden states (b,s,2048)`、`RMSNorm eps 1e-6`、`q/k/v_proj 2048→8*256 / 1*256`、`RoPE`、`input layernorm` |
 | Gemma4 官方模型卡样例（modelscope API） | ✅ 1 号卡跑通（E2B 权重）；图文样例 prompt 274 token、生成 186 token / 7.5s，正确识别 GoldenGate 桥；纯文本样例 28 token → 28 token / 2.3s；`parse_response` 均返回 `{'role': 'assistant', 'content': ...}` |
+| PT 纯文本 demo（`pt/pt_text_demo.sh`） | ✅ Qwen3-0.6B，10 条语料 3 epoch = 30/30 步，8s，train_loss 3.941，eval_loss 4.564→**4.414**，token_acc 0.25→0.51，显存 1.58 GiB |
+| CPT 图文 demo（`cpt/cpt_vl_demo.sh`） | ✅ Gemma4-E2B，8 条图文 2 epoch / 8 步，10.3s，train_loss 4.104，eval_loss 5.773→**5.428**，显存 10.75 GiB，无 `IndexError`（`<image>` 占位与图片索引均正确） |
 
 产物目录：`experiments/output/sft/`、`experiments/output/rl_dpo/`（v5 为最终成功版本）、`experiments/output/rl_grpo/`（v2 为最终成功版本）、`experiments/output/sft_tp/`、`experiments/output/cpt-gemma4-1gpu/`。
 
@@ -152,6 +171,11 @@ experiments/
 wsl -d Ubuntu-24.04
 conda activate ms-swift
 cd /root/ms-swift
+
+# 预训练 demo（PT / CPT，各 10 秒内跑完）
+bash experiments/pt/pt_text_demo.sh              # 纯文本 PT demo（Qwen3-0.6B，30 步 8s）
+bash experiments/cpt/cpt_vl_demo.sh              # 图文 CPT demo（Gemma4-E2B，8 步 10s）
+python experiments/datasets/make_demo_pt_cpt.py  # 重新生成 demo 数据（可选）
 
 # 文本训练
 bash experiments/sft/sft_2gpu.sh              # SFT（DDP）
