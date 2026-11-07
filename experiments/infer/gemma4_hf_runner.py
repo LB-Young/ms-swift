@@ -8,8 +8,9 @@ Gemma4-E2B 纯 transformers 推理脚本（不依赖 ms-swift）
   不手工写 <|image|> / <start_of_image>，避免占位符写错（这是 ms-swift 版踩过的坑）
 
 用法：
-  python3 gemma4_hf_runner.py --image /path/to.png --question "请详细描述这张图片"
-  python3 gemma4_hf_runner.py --gpu 1                    # 不带图，纯文本测试
+  python3 gemma4_hf_runner.py                            # 默认用内置图片（Gemma-1 解码层架构图）
+  python3 gemma4_hf_runner.py --image /path/to.png       # 换成别的图
+  python3 gemma4_hf_runner.py --no_image                 # 不带图，纯文本测试
 """
 import os
 import sys
@@ -30,6 +31,9 @@ def _early_gpu_index(default: int = 1) -> int:
 
 GPU_INDEX = _early_gpu_index(1)
 os.environ["CUDA_VISIBLE_DEVICES"] = str(GPU_INDEX)  # 必须在 import torch 之前
+
+# 内置默认测试图：Gemma-1 笔记里的单层 DecoderLayer 架构图（不传 --image 时直接用这张）
+DEFAULT_IMAGE = "/mnt/e/transformers/bayon-note/Gemma/gemma-1/_arch/02_3单个_GemmaDecoderLayer_解剖.png"
 
 import torch  # noqa: E402
 import transformers  # noqa: E402
@@ -122,7 +126,8 @@ def main():
     ap = argparse.ArgumentParser(description="Gemma4-E2B transformers 推理（默认 1 号卡）")
     ap.add_argument("--model", default="/mnt/e/models/model/gemma-4-E2B-it")
     ap.add_argument("--gpu", type=int, default=1, help="可见 GPU 序号（默认 1，即只用 1 号卡）")
-    ap.add_argument("--image", default=None, help="测试图片路径；不传则纯文本推理")
+    ap.add_argument("--image", default=DEFAULT_IMAGE, help="测试图片路径（默认内置 Gemma-1 解码层架构图）")
+    ap.add_argument("--no_image", action="store_true", help="纯文本模式，不传图片")
     ap.add_argument("--question", default="请详细描述这张图片的内容，包括类型、数据和结论。")
     ap.add_argument("--max_new_tokens", type=int, default=512)
     args = ap.parse_args()
@@ -133,8 +138,10 @@ def main():
         print(f"visible devices: {torch.cuda.device_count()} -> {torch.cuda.get_device_name(0)}", flush=True)
 
     runner = Gemma4Runner(args.model, verbose=True)
+    img = None if args.no_image else args.image
+    print(f"[image] {'disabled (pure text)' if args.no_image else args.image}", flush=True)
     t_all = time.time()
-    answer = runner.chat(args.image, args.question, max_new_tokens=args.max_new_tokens)
+    answer = runner.chat(img, args.question, max_new_tokens=args.max_new_tokens)
     print("=" * 60, flush=True)
     print(f"[Q] {args.question}", flush=True)
     print(f"[A] {answer}", flush=True)

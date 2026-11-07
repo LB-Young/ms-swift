@@ -6,7 +6,8 @@ from PIL import Image
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 MODEL = "/mnt/e/models/model/gemma-4-E2B-it"
-IMAGE = sys.argv[1] if len(sys.argv) > 1 else None
+DEFAULT_IMAGE = "/mnt/e/transformers/bayon-note/Gemma/gemma-1/_arch/02_3单个_GemmaDecoderLayer_解剖.png"
+IMAGE = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_IMAGE
 Q = sys.argv[2] if len(sys.argv) > 2 else "请详细描述这张图片的内容"
 
 processor = AutoProcessor.from_pretrained(MODEL)

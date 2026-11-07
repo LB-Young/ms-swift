@@ -122,6 +122,7 @@ experiments/
 | 多模态 CPT（Qwen2-VL-2B + 图文集） | ✅ 16/16 步，train_loss 2.86→**1.95**，train_loss 均值 2.151，eval_loss 1.956，token_acc 0.44→0.60，**5.24GB/卡**，22s；推理 8/8 张图，图表数值/占比与 GT 高度一致 |
 | 多模态 CPT（Gemma4-E2B + 图文集，单卡） | ✅ 16/16 步，train_loss 3.685，**10.75GiB**，30.6s（2.09 samples/s）；推理 8/8 张图全部正确识别并描述（图表类型/数值/布局与图像一致）；双卡在 WSL 下受 `device not ready`（GPU mapping）限制无法跑 |
 | Gemma4 纯 transformers 推理 | ✅ 1 号卡跑通；bar_00 输出 48/76/106/84、pie_02 输出 13/31/38/18，与 mock GT 完全一致 |
+| Gemma4 纯 transformers 推理（内置架构图） | ✅ 不传 `--image` 直接读笔记里的 Gemma-1 解码层架构图，正确复述 `hidden states (b,s,2048)`、`RMSNorm eps 1e-6`、`q/k/v_proj 2048→8*256 / 1*256`、`RoPE`、`input layernorm` |
 
 产物目录：`experiments/output/sft/`、`experiments/output/rl_dpo/`（v5 为最终成功版本）、`experiments/output/rl_grpo/`（v2 为最终成功版本）、`experiments/output/sft_tp/`、`experiments/output/cpt-gemma4-1gpu/`。
 
@@ -164,8 +165,9 @@ python experiments/cpt/make_mock_vl_cpt.py    # 重新生成 mock 图文集（�
 
 # 推理 / 调试
 python experiments/infer/infer_gemma4.py      # Gemma4 确定性验收（需 gemma.py 适配层补丁）
-python experiments/infer/gemma4_hf_runner.py --image experiments/datasets/mock_vl_cpt/images/bar_00.png \
-    --question 请详细描述这张图片的内容      # 纯 transformers，默认 1 号卡
-python experiments/infer/gemma4_hf_simple.py experiments/datasets/mock_vl_cpt/images/pie_02.png
+python experiments/infer/gemma4_hf_runner.py  # 纯 transformers，默认 1 号卡；不传参即用内置图（Gemma-1 解码层架构图）
+python experiments/infer/gemma4_hf_runner.py --image <path>   # 换成别的图
+python experiments/infer/gemma4_hf_runner.py --no_image       # 纯文本，不带图
+python experiments/infer/gemma4_hf_simple.py  # 极简版，同样默认用内置图
 python experiments/infer/repro_gemma4_image_drop.py   # 复现丢图（A/B/C 对照）
 ```
