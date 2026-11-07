@@ -1,6 +1,7 @@
 #!/bin/bash
 # 4B + LoRA：ZeRO 策略矩阵冒烟（无 DS / zero0 / zero1 / zero2 / zero3 / zero2_offload / zero3_offload）
 # 统一配置：LoRA rank8、max_length 256、500 条、10 步、batch1、grad_accum4
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_4b_zero_matrix.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

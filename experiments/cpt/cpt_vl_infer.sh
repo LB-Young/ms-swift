@@ -1,4 +1,7 @@
 #!/bin/bash
+# 用途：用 Qwen2-VL-2B CPT 产出的 LoRA adapter 对验证集推理（swift infer，自动取 checkpoint-16）
+# 输出：experiments/output/cpt-vl-2gpu/infer_results.jsonl；日志 experiments/logs/cpt_vl_infer.log
+# 运行：cd /root/ms-swift && bash experiments/cpt/cpt_vl_infer.sh
 set -e
 export HOME=/root
 export CONDA_PREFIX=/opt/miniconda3/envs/ms-swift

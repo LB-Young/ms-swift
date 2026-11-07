@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# 运行：python experiments/infer/infer_gemma4.py（需 Gemma4 CPT 产出的 checkpoint-16）
 """Gemma4 CPT adapter inference over the mock VL val set.
 
 Why not `swift infer --val_dataset`?

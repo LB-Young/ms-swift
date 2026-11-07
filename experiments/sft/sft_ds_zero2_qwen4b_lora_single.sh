@@ -2,6 +2,7 @@
 # 单卡 DeepSpeed ZeRO-2：Qwen3-4B + LoRA（v4 单卡版）
 # 背景：WSL VM 内存仅 15GB，双卡 4B 训练两进程各 7.5GB RSS → 内核 global_oom 杀进程（有 /var/log/syslog 铁证）。
 #      单卡单进程 RSS ~7.5GB < 15GB，显存 8GB 权重 + LoRA < 16GB，可跑。
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_ds_zero2_qwen4b_lora_single.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0

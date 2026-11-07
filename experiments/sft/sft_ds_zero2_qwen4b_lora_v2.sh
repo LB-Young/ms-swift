@@ -1,5 +1,6 @@
 #!/bin/bash
 # 两卡 DeepSpeed ZeRO-2：Qwen3-4B + LoRA（v2 输出目录）
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_ds_zero2_qwen4b_lora_v2.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

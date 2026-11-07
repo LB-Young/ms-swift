@@ -1,5 +1,6 @@
 #!/bin/bash
 # 两卡 DeepSpeed ZeRO-3 full 微调：Qwen3-4B（第二轮：max_length 256 + expandable_segments 抗碎片）
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_ds_zero3_qwen4b_v2.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

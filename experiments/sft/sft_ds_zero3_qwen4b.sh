@@ -1,6 +1,7 @@
 #!/bin/bash
 # 两卡 DeepSpeed ZeRO-3 full 微调：Qwen3-4B（大模型场景，验证 ZeRO 显存价值）
 # 4B bf16 权重 8GB + 优化器 16GB：单卡放不下 → 用 ZeRO-3 把权重/优化器/梯度全分片
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_ds_zero3_qwen4b.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

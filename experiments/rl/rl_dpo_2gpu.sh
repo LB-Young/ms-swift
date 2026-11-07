@@ -1,6 +1,7 @@
 #!/bin/bash
 # 两卡 DDP DPO（RL）冒烟脚本（Qwen3-0.6B + orca_dpo_pairs 官方数据集）
 # v5: 换官方标准 DPO 数据集，避免 zhihu 长文本问题
+# 运行：cd /root/ms-swift && bash experiments/rl/rl_dpo_2gpu.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

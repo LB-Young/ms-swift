@@ -1,4 +1,8 @@
 #!/bin/bash
+# 用途：Gemma4-E2B 单卡多模态图文 CPT（0 号卡；mock 图文集；LoRA r8/alpha16；冻结 ViT+aligner）
+# 要点：swift pt + use_chat_template true + loss_scale all（全 token 算 loss）
+# 输出：experiments/output/cpt-gemma4-1gpu
+# 运行：cd /root/ms-swift && bash experiments/cpt/cpt_gemma4_1gpu.sh
 export HOME=/root
 export PATH=/opt/miniconda3/envs/ms-swift/bin:$PATH
 BASE=/root/ms-swift/experiments

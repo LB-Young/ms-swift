@@ -1,6 +1,7 @@
 #!/bin/bash
 # 两卡 DeepSpeed ZeRO-2 GRPO 冒烟脚本（Qwen3-0.6B + gsm8k + accuracy reward）
 # 在 rl_grpo_2gpu.sh 基础上新增 --deepspeed zero2（DeepSpeed 管理梯度/优化器分片）
+# 运行：cd /root/ms-swift && bash experiments/rl/rl_grpo_ds_2gpu.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

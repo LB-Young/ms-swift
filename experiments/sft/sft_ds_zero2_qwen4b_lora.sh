@@ -2,6 +2,7 @@
 # 两卡 DeepSpeed ZeRO-2：Qwen3-4B + LoRA 冒烟（大模型可跑路线）
 # 背景：4B full 微调（zero2/zero3）在 2x16GB 卡均 OOM（前向 allgather 完整权重 8GB > 16GB）；
 #       LoRA 冻结权重 + 小 adapter 参数，是消费卡上跑 4B 的可行方案
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_ds_zero2_qwen4b_lora.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

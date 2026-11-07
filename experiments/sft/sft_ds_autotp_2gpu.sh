@@ -2,6 +2,7 @@
 # 两卡 DeepSpeed AutoTP（张量并行）SFT 冒烟脚本（Qwen3-0.6B + alpaca-zh，full 微调）
 # 用法：--deepspeed zero2 + --deepspeed_autotp_size 2（AutoTP 自动把层内权重切分到 2 卡）
 # 注意：AutoTP 仅支持 full 参数微调（--tuner_type full）
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_ds_autotp_2gpu.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

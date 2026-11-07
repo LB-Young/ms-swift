@@ -2,6 +2,7 @@
 # 两卡 DeepSpeed ZeRO-2：Qwen3-4B + LoRA（v3 降内存版）
 # 背景：WSL VM 内存 15GB（物理 31GB 的 50%），4B 双进程加载峰值易顶爆被杀。
 #      本版压低 CPU 内存：数据集#500、max_length 256、dataloader 0、MALLOC_ARENA_MAX=1、10 步快速落盘
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_ds_zero2_qwen4b_lora_v3.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

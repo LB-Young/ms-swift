@@ -1,5 +1,6 @@
 #!/bin/bash
 # 4B + LoRA：zero3_offload 单测（预期：CPU 优化器需要 nvcc 编译 DeepSpeedCPUAdam，可能失败——验证结论）
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_4b_zero3_offload.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

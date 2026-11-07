@@ -1,3 +1,6 @@
+# 用途：Gemma4-E2B 极简推理（25 行版，纯 transformers，只用 1 号卡，输出直接打印）
+# 用法：python gemma4_hf_simple.py [图片路径] [提问]；不传图片则用内置的 Gemma-1 解码层架构图
+# 运行：cd /root/ms-swift && python experiments/infer/gemma4_hf_simple.py
 import os, sys
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # 只用 1 号卡，必须在 import torch 之前
 

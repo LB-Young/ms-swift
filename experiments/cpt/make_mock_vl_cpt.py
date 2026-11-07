@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# 运行：python experiments/cpt/make_mock_vl_cpt.py（输出 experiments/datasets/mock_vl_cpt/，可重复执行）
 """生成 mock 多图文 CPT 数据集（图文对，长文本描述）。
 
 输出目录: /root/ms-swift/experiments/datasets/mock_vl_cpt/

@@ -3,6 +3,8 @@
 # ms-swift has no `cpt` subcommand; CPT == `swift pt` (SwiftPretrain inherits SwiftSft,
 # differing only in use_chat_template=False + loss_scale='all' -> every token contributes to loss).
 # 2x RTX 5060 Ti (sm_120), LoRA, Qwen2-VL-2B-Instruct.
+# 运行：cd /root/ms-swift && bash experiments/cpt/cpt_vl_2gpu.sh
+# 输出：experiments/output/cpt-vl-2gpu（✅ 已跑通，5.24GB/卡）
 set -e
 
 export HOME=/root

@@ -1,4 +1,7 @@
 #!/bin/bash
+# 用途：用 Gemma4 CPT 产出的 LoRA adapter 对验证集推理（swift infer，自动取最新 checkpoint-16）
+# 输出：experiments/output/cpt-gemma4-1gpu/infer_results.jsonl；日志 experiments/logs/cpt_gemma4_infer.log
+# 运行：cd /root/ms-swift && bash experiments/cpt/cpt_gemma4_infer.sh
 set -e
 export HOME=/root
 export CONDA_PREFIX=/opt/miniconda3/envs/ms-swift

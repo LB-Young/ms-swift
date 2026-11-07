@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# 运行：python experiments/infer/repro_gemma4_image_drop.py（纯 transformers 复现丢图，A/B/C 三段对照）
 """
 复现 Gemma4 在 transformers 5.19 下的"推理看不到图片"问题（只用 1 号卡）
 

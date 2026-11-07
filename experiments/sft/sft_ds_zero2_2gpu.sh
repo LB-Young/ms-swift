@@ -1,6 +1,7 @@
 #!/bin/bash
 # 两卡 DeepSpeed ZeRO-2 SFT 冒烟脚本（Qwen3-0.6B + alpaca-zh，LoRA）
 # 用法同 DDP，仅新增 --deepspeed zero2（ms-swift 预置配置，也可传自定义 json 路径）
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_ds_zero2_2gpu.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

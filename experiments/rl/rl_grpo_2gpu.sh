@@ -2,6 +2,7 @@
 # 两卡 DDP GRPO 冒烟脚本（Qwen3-0.6B + gsm8k 数学题 + accuracy reward）
 # native rollout（--use_vllm false，无需安装 vllm）；如需 vllm 加速改为 --use_vllm true
 # 列映射：gsm8k 的 question→query（模板输入）、answer→solution（accuracy reward 所需）
+# 运行：cd /root/ms-swift && bash experiments/rl/rl_grpo_2gpu.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

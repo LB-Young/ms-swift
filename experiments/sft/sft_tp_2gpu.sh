@@ -5,6 +5,7 @@
 #      适用于模型权重超单卡显存、但每层能放下的场景（官方示例：Qwen2.5-VL-72B 2×76GiB）。
 # 注意：0.6B 模型本身单卡能装下，此脚本仅用于验证 TP 流程可跑通；
 #      真正需要 TP 时请换成大模型，并配合 --max_memory 控制每卡分配。
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_tp_2gpu.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

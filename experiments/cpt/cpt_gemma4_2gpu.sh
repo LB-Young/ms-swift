@@ -2,6 +2,9 @@
 # CPT (Continued Pre-Training) on multimodal data with Gemma4 E2B (vision+audio towers).
 # Same CPT semantics as cpt_vl_2gpu.sh: `swift pt` + use_chat_template=False + loss_scale='all'.
 # Gemma4 template uses <|image|> placeholder -> dataset gemma4_cpt_*.jsonl.
+# 运行：cd /root/ms-swift && bash experiments/cpt/cpt_gemma4_2gpu.sh
+# 注意：Gemma4 双卡在 WSL 下报 `CUDA driver error: device not ready`，本脚本未跑通，留档
+# 输出：experiments/output/cpt-gemma4-2gpu
 set -e
 
 export HOME=/root

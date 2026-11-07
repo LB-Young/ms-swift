@@ -1,5 +1,6 @@
 #!/bin/bash
 # 两卡 DDP SFT 冒烟脚本（Qwen3-0.6B + alpaca-gpt4-data-zh）
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_2gpu.sh
 set -e
 export HOME=/root
 export CUDA_VISIBLE_DEVICES=0,1

@@ -3,6 +3,7 @@
 # ✅ 已跑通（2026-10-19）：依赖与补丁均已就位（见 ms-swift安装到训练全流程记录.md 第十章）
 # 说明：标准 TP——把每一层内部权重（注意力头/FFN 列）切分到多卡，前向/反向 all-reduce 拼合。
 # 用法：megatron sft --tensor_model_parallel_size 2（TP 切分大小 = 显卡数）
+# 运行：cd /root/ms-swift && bash experiments/sft/sft_megatron_tp_2gpu.sh
 set -e
 export HOME=/root
 export PYTORCH_CUDA_ALLOC_CONF='expandable_segments:True'

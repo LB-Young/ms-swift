@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# 运行：python experiments/infer/gemma4_hf_runner.py（默认 1 号卡 + 内置架构图；--no_image 走纯文本）
 """
 Gemma4-E2B 纯 transformers 推理脚本（不依赖 ms-swift）
 
