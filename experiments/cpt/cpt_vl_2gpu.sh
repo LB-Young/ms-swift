@@ -4,7 +4,8 @@
 # differing only in use_chat_template=False + loss_scale='all' -> every token contributes to loss).
 # 2x RTX 5060 Ti (sm_120), LoRA, Qwen2-VL-2B-Instruct.
 # 运行：cd /root/ms-swift && bash experiments/cpt/cpt_vl_2gpu.sh
-# 输出：experiments/output/cpt-vl-2gpu（✅ 已跑通，5.24GB/卡）
+# 输出：experiments/output/cpt-vl-2gpu
+# 注意：不要设 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True（Gemma4 双卡会 device not ready，全库统一不设）
 set -e
 
 export HOME=/root
@@ -28,7 +29,6 @@ echo "[CPT-VL] out   : $OUT"
 
 CUDA_VISIBLE_DEVICES=0,1 \
 NPROC_PER_NODE=2 \
-PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 $SWIFT pt \
   --model "$MODEL" \
   --dataset "$DS/cpt_train.jsonl" \

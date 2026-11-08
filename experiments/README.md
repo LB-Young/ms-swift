@@ -157,7 +157,7 @@ experiments/
 | SFT 4B 单卡 DS ZeRO-2 (LoRA) | ✅ 10/10 步，train_loss 2.12，8.54GB；checkpoint-10 已存 |
 | SFT 4B 双卡 DS ZeRO-2 (LoRA) | ✅ 20/20 步，train_loss 1.725，9.53GB/卡；checkpoint-20 已存（WSL 扩容 24GB 后跑通） |
 | 4B ZeRO 矩阵（nods/zero0/1/2/3） | ✅ 5 策略全跑通 10/10 步，loss 2.18~2.22，8.5~8.8GB；纯 DDP 最快 16.9s，zero3 最慢 152s；offload×2 因 CPUAdam 需 nvcc 失败 |
-| 多模态 CPT（Qwen2-VL-2B + 图文集） | ✅ 16/16 步，train_loss 2.86→**1.95**，train_loss 均值 2.151，eval_loss 1.956，token_acc 0.44→0.60，**5.24GB/卡**，22s；推理 8/8 张图，图表数值/占比与 GT 高度一致 |
+| 多模态 CPT（Qwen2-VL-2B + 图文集） | ✅ **双卡 DP2**，16/16 步，train_loss 均值 2.151，eval_loss **1.957**，token_acc 0.576，**5.60 GiB/卡**，25s；推理 8/8 张图，图表数值/占比与 GT 高度一致；重跑时同样去掉了 `PYTORCH_CUDA_ALLOC_CONF` |
 | 多模态 CPT（Gemma4-E2B + 图文集，单卡） | ✅ 16/16 步，train_loss 3.685，**10.75GiB**，30.6s（2.09 samples/s）；推理 8/8 张图全部正确识别并描述（图表类型/数值/布局与图像一致）；双卡见下方 `pt/` 四个脚本（去掉 `PYTORCH_CUDA_ALLOC_CONF` 后可跑） |
 | Gemma4 纯 transformers 推理 | ✅ 1 号卡跑通；bar_00 输出 48/76/106/84、pie_02 输出 13/31/38/18，与 mock GT 完全一致 |
 | Gemma4 纯 transformers 推理（内置架构图） | ✅ 不传 `--image` 直接读笔记里的 Gemma-1 解码层架构图，正确复述 `hidden states (b,s,2048)`、`RMSNorm eps 1e-6`、`q/k/v_proj 2048→8*256 / 1*256`、`RoPE`、`input layernorm` |
