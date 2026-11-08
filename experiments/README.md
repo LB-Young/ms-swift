@@ -64,29 +64,36 @@ experiments/
 | RL 数学 | `gsm8k/` | GRPO 数学数据集（modelscope 加载脚本 + ms-swift 云端拉取） |
 | 多模态 CPT | `mock_vl_cpt/`（mock 生成） | 64+8 条图文对：matplotlib 合成图表/示意图（72 张 512px）+ 每图配 250~450 字中文描述；`cpt/make_mock_vl_cpt.py` 可复现 |
 | PT demo | `demo_pt_cpt/pt_{train,val}.jsonl`（mock） | 10+2 条纯文本语料，每行 `{"text": ...}`，内容取自本项目真实经验 |
-| CPT demo | `demo_pt_cpt/cpt_{train,val}.jsonl` + `images/`（mock） | 8+2 条图文对，图从 `mock_vl_cpt` 挑选复制，答案与图内容一致；`datasets/make_demo_pt_cpt.py` 可复现 |
+| CPT demo | `demo_pt_cpt/cpt_{train,val}.jsonl` + `images/`（mock） | 8+2 条图文对（旧版 messages 结构），图从 `mock_vl_cpt` 挑选复制，答案与图内容一致；`datasets/make_demo_pt_cpt.py` 可复现 |
+| CPT 结构化 demo | `demo_pt_cpt/structured/cpt_text_images_{train,val}.jsonl`（mock） | 8+2 条图文对，每行 `{"text": "…", "images": ["/abs/x.png"]}`，**无 role**；`datasets/make_demo_text_images.py` 可复现 |
+| PT 结构化 demo | `demo_pt_cpt/structured/pt_text_{train,val}.jsonl`（mock） | 10+2 条纯文本语料，每行只有 `{"text": ...}` |
 
-**PT 与 CPT 的数据格式差异**（`datasets/make_demo_pt_cpt.py` 生成）：
+**PT 与 CPT 的数据格式差异**（`datasets/make_demo_text_images.py` 生成）：
 
 | | 一行数据长什么样 | 训练命令 |
 |---|---|---|
 | PT（纯文本预训练） | `{"text": "Gemma 4 的 E2B 与 E4B 是同一代的两档模型……"}` | `swift pt --use_chat_template false --loss_scale all` |
-| CPT（多模态图文继续预训练） | `{"messages": [{"role":"user","content":"<image>请详细描述这张图片……"},{"role":"assistant","content":"这是一张柱状图……"}], "images": ["/root/ms-swift/experiments/datasets/demo_pt_cpt/images/bar_00.png"]}` | `swift pt --use_chat_template true --loss_scale all` |
+| CPT（图文，**推荐**） | `{"text": "这是一张柱状图……", "images": ["/root/ms-swift/experiments/datasets/demo_pt_cpt/images/bar_00.png"]}` | 同上，`--use_chat_template false`，text 里**不带** `<image>` 占位 |
+| CPT（图文，旧版 messages） | `{"messages": [{"role":"user","content":"<image>请详细描述这张图片……"},{"role":"assistant","content":"这是一张柱状图……"}], "images": ["…"]}` | `swift pt --use_chat_template true --loss_scale all` |
 
-差别就三点：PT 是连续语料、没有 role；CPT 是图文对，content 里用**标准 `<image>`**（不能写 `<|image|>`，会双计）占位、`images` 给绝对路径；两者共用 `swift pt`，都用全 token loss。
+差别就三点：PT 与图文 CPT 现在**同一套 key**（`text` + `images`），不再需要 role；`text` 里不要写 `<image>` 占位符，图片位置由 `images` 字段决定（框架自行插入 image pad）；旧版 messages 写法仍可用，但一定带 role 标记 token。
 
 两点容易混淆的地方：
 
-- **纯文本 CPT 与 PT 完全同构**：都用 `{"text": ...}`，没有 role、不套模板。写成 `messages` 只发生在**图文**场景——一段 text 放不下"图插在序列的哪个位置"。ms-swift 承载图文交错序列的结构就是 `messages` + `images`，其自带的经典多模态预训练集 LLaVA-Pretrain 正是这种格式（`swift/dataset/dataset/mllm.py:1011` 的 `LLaVAPretrainPreprocessor` 继承 `MessagesPreprocessor`，user="请描述这张图"、assistant=caption）。
-- **图文 CPT 用 messages 也不算 SFT**，判据不是外壳而是 loss 覆盖范围：SFT 默认 `loss_scale=default`，只算 assistant 段（`swift/arguments/base_args/template_args.py:140`）；PT/CPT 用 `loss_scale=all`，user 段、caption、模板标记全部算 loss（`swift/arguments/pretrain_args.py:10` 默认即 `all`）。代价是 messages 路径一定带 role 标记 token（`swift/template/base.py:1444-1449` 强制按 user/assistant 成对解析），纯语言语料走 `text` 字段才能做到零标记。
+- **纯文本 CPT 与 PT 完全同构**：都用 `{"text": ...}`，没有 role、不套模板。旧版把图文也写成 `messages`，是因为当时的例子走的是 LLaVA-Pretrain 那套 `MessagesPreprocessor`（`swift/dataset/dataset/mllm.py:1011`，user="请描述这张图"、assistant=caption）。实测 `{"text": …, "images": […]}` + `--use_chat_template false` 同样被 `swift pt` 接受，且序列里**零 role 标记**：Gemma4 图文样本解码出来是 `<|image>` + 图像 pad token + 正文 + `<eos>`，没有 `<start_of_turn>`；Qwen3.5 纯文本解码出来是正文 + `<|im_end|>`，没有 `<|im_start|>user`。
+- **判据不是外壳而是 loss 覆盖范围**：SFT 默认 `loss_scale=default`，只算 assistant 段（`swift/arguments/base_args/template_args.py:140`）；PT/CPT 用 `loss_scale=all`，正文与模板标记全部算 loss（`swift/arguments/pretrain_args.py:10` 默认即 `all`）。旧版 messages 路径一定会把消息成对解析成 user/assistant 并注入 role 标记（`swift/template/base.py:1444-1449`），追求零模板噪声就走 `text` 字段。
 
 > ⚠️ zhihu_rlhf_3k 的 chosen/rejected 回答超长，直接用于 DPO 会出现 `logits/chosen=nan` 且 OOM；**改用 ms-swift 注册表官方数据集 `swift/orca_dpo_pairs` 后训练完全正常**。zhihu 数据保留作参考。
 
 ## 3. 脚本（按目录分类）
 
-### 3.1 pt/（1 个，纯文本预训练 demo）
+### 3.1 pt/（5 个，PT/CPT demo：text + images 结构）
 
 - `pt/pt_text_demo.sh`：纯文本 PT 最小 demo（Qwen3-0.6B + `{"text": ...}` 语料；`--use_chat_template false --loss_scale all`，不套模板、全 token 算 loss）
+- `pt/pt_text_gemma4_1gpu.sh`：纯文本 PT（Gemma4-E2B，10 条语料 2 epoch）
+- `pt/pt_text_qwen35_1gpu.sh`：纯文本 PT（Qwen3.5-0.8B，比 Qwen3-0.6B 更新；**必须显式** `--model_type qwen3_5 --template qwen3_5`，否则自动匹配有歧义报错）
+- `pt/cpt_text_images_gemma4_1gpu.sh`：图文 CPT（Gemma4-E2B，`{"text","images"}` 无 role，`freeze_vit/aligner`）
+- `pt/cpt_text_images_qwen3vl_1gpu.sh`：图文 CPT（Qwen3-VL-2B-Instruct，同样无 role；template 由框架自动匹配）
 
 ### 3.2 sft/（13 个，文本 SFT）
 
@@ -156,6 +163,10 @@ experiments/
 | Gemma4 官方模型卡样例（modelscope API） | ✅ 1 号卡跑通（E2B 权重）；图文样例 prompt 274 token、生成 186 token / 7.5s，正确识别 GoldenGate 桥；纯文本样例 28 token → 28 token / 2.3s；`parse_response` 均返回 `{'role': 'assistant', 'content': ...}` |
 | PT 纯文本 demo（`pt/pt_text_demo.sh`） | ✅ Qwen3-0.6B，10 条语料 3 epoch = 30/30 步，8s，train_loss 3.941，eval_loss 4.564→**4.414**，token_acc 0.25→0.51，显存 1.58 GiB |
 | CPT 图文 demo（`cpt/cpt_vl_demo.sh`） | ✅ Gemma4-E2B，8 条图文 2 epoch / 8 步，10.3s，train_loss 4.104，eval_loss 5.773→**5.428**，显存 10.75 GiB，无 `IndexError`（`<image>` 占位与图片索引均正确） |
+| 纯文本 PT（`pt/pt_text_gemma4_1gpu.sh`） | ✅ Gemma4-E2B，10 条 2 epoch = 20/20 步，8.9s，train_loss 8.2，eval_loss **7.121**，显存 10.43 GiB |
+| 纯文本 PT（`pt/pt_text_qwen35_1gpu.sh`） | ✅ Qwen3.5-0.8B，20/20 步，11.3s，train_loss 3.725，eval_loss **4.172**，显存 **2.28 GiB** |
+| 图文 CPT 无 role（`pt/cpt_text_images_gemma4_1gpu.sh`） | ✅ Gemma4-E2B，8 条 2 epoch / 8 步，8.95s，train_loss 4.832，eval_loss **6.219**，10.61 GiB；序列解码为 `<|image>`+image pad+正文+`<eos>`，**零 role 标记**，`images_dir` 已生成 |
+| 图文 CPT 无 role（`pt/cpt_text_images_qwen3vl_1gpu.sh`） | ✅ Qwen3-VL-2B-Instruct，8/8 步，9.07s，train_loss 1.871，eval_loss **2.813**，4.63 GiB；token_acc 0.42→0.67 |
 | RL ORPO（`rl/rl_orpo_2gpu.sh`） | ✅ 20/20 步，60.7s，train_loss 1.666，14.42 GiB；`nll_loss`/`log_odds_ratio` 指标正常，无 ref model |
 | RL SimPO（`rl/rl_simpo_2gpu.sh`） | ✅ 20/20 步，61.6s，train_loss 3.43，14.42 GiB；`rewards/margins` 在 ±0.3 附近抖动 |
 | RL CPO（`rl/rl_cpo_2gpu.sh`） | ✅ 20/20 步，60.4s，train_loss 7.826（含 NLL 项，量级偏大属正常），14.42 GiB |
@@ -183,6 +194,11 @@ experiments/
 13. **Gemma4 数据占位符必须用标准 `<image>`**：预写成 `<|image|>` 会导致 image token 双计（模板 replace_tag 会再插一次），`gemma.py:309` 报 `IndexError: list index out of range` → 全样本 encode 失败。单张 512px 图 = 256 个 image token(258880)，pixel_values shape `(1, 2520, 768)`，整条样本 encode 452 token。
 14. **transformers 5.19 的 Gemma4 `get_image_features().pooler_output` 是 tuple**（按图 split），旧版是单 tensor。ms-swift patch 当 tensor 用会报 `AttributeError: 'tuple' object has no attribute 'to'`。已在 `swift/model/models/gemma.py` image/video 两处补 `torch.cat(..., dim=0)`（**改的是 ms-swift 适配层，transformers 安装包未动**）。
 15. **推理 generate 丢图（最隐蔽）**：transformers 5.19 的 `generate()` 会在首步把 `pixel_values` 预编码成 `mm_encoder_outputs` 再传 forward，而 ms-swift 的 Gemma4 patch 只认 `pixel_values` → 走"假图"分支，模型回答"请提供图片"（训练不受影响，因为训练直接 forward 传 pixel_values）。修复：`swift/model/models/gemma.py` 的 patch forward 增加 `mm_encoder_outputs` 参数并消费 `mm_encoder_outputs['image'/'video'].pooler_output`（torch.cat 后 masked_scatter 注入）。复现与验证：`infer/repro_gemma4_image_drop.py`。
+16. **单卡必须显式 `NPROC_PER_NODE=1`**：漏了会走 DataParallel 包装，PEFT 套一层后 `model.device` 取不到参数，报 `AttributeError: 'LoraModel' object has no attribute 'device'` → `StopIteration`（`swift/template/base.py:1732` 的 `pre_forward_hook`）。四套 text/images 脚本都写了这个变量。
+17. **`--max_completion_length` 不属于 `swift pt`**：它属于 RLHF，误传报 `ValueError: remaining_argv: ['--max_completion_length', '64']`。
+18. **Qwen3.5 的 model_type / template 自动匹配都有歧义**：`--model_type` 报 `['qwen3_5','ovis_ocr2','qwen3_5_emb','wemm_embedding']`，`--template` 报 `['qwen3_5','qwen3_8']`，两者都必须显式传 `qwen3_5`。
+19. **`text` + `images` 结构里 text 不能写 `<image>` 占位符**：图片位置由 `images` 字段决定，框架自己插 image pad；写了占位符会重复计数。
+20. **`{"text":…, "images":[…]}` 确实能零 role**：实测序列解码为 `<|image>` + 256 个 image pad token + 正文 + `<eos>`，无 `<start_of_turn>`；Qwen3.5 纯文本为正文 + `<|im_end|>`，无 `<|im_start|>user`。验证脚本思路见日志：从训练日志取出 `[INPUT_IDS]` 再 `tokenizer.decode`。
 
 ## 6. 日常使用
 
@@ -192,9 +208,14 @@ conda activate ms-swift
 cd /root/ms-swift
 
 # 预训练 demo（PT / CPT，各 10 秒内跑完）
-bash experiments/pt/pt_text_demo.sh              # 纯文本 PT demo（Qwen3-0.6B，30 步 8s）
-bash experiments/cpt/cpt_vl_demo.sh              # 图文 CPT demo（Gemma4-E2B，8 步 10s）
-python experiments/datasets/make_demo_pt_cpt.py  # 重新生成 demo 数据（可选）
+bash experiments/pt/pt_text_demo.sh                 # 纯文本 PT demo（Qwen3-0.6B，30 步 8s）
+bash experiments/cpt/cpt_vl_demo.sh                 # 图文 CPT demo（Gemma4-E2B，messages 旧格式，8 步 10s）
+bash experiments/pt/pt_text_gemma4_1gpu.sh          # 纯文本 PT（Gemma4-E2B，text 结构）
+bash experiments/pt/pt_text_qwen35_1gpu.sh          # 纯文本 PT（Qwen3.5-0.8B，text 结构）
+bash experiments/pt/cpt_text_images_gemma4_1gpu.sh  # 图文 CPT（Gemma4-E2B，text+images 无 role）
+bash experiments/pt/cpt_text_images_qwen3vl_1gpu.sh # 图文 CPT（Qwen3-VL-2B，text+images 无 role）
+python experiments/datasets/make_demo_pt_cpt.py     # 重新生成 messages 版 demo 数据（可选）
+python experiments/datasets/make_demo_text_images.py # 生成 text/images 版 + 纯文本版数据（可选）
 
 # 文本训练
 bash experiments/sft/sft_2gpu.sh              # SFT（DDP）
