@@ -100,11 +100,18 @@ experiments/
 - `sft/sft_4b_zero_matrix.sh`：4B ZeRO 矩阵对比（nods / zero0 / 1 / 2 / 3）
 - `sft/sft_4b_zero3_offload.sh`：ZeRO-3 + offload（CPUAdam 需 nvcc，**未跑通，留档**）
 
-### 3.3 rl/（3 个）
+### 3.3 rl/（8 个，覆盖 ms-swift 支持的 9 种 `--rlhf_type` 中的 6 种）
 
 - `rl/rl_dpo_2gpu.sh`：两卡 DDP DPO（LoRA，`swift/orca_dpo_pairs#500`）
+- `rl/rl_orpo_2gpu.sh`：两卡 DDP **ORPO**（单阶段偏好对齐，chosen/rejected 拼一条序列，**不需要 ref model**）
+- `rl/rl_simpo_2gpu.sh`：两卡 DDP **SimPO**（无参考模型，长度归一化 + reward margin，`beta 2.0` / `simpo_gamma 1.0`）
+- `rl/rl_cpo_2gpu.sh`：两卡 DDP **CPO**（SimPO 偏好项 + 一条 SFT(NLL) 项，`cpo_alpha 1.0`，无 ref model）
+- `rl/rl_kto_2gpu.sh`：两卡 DDP **KTO**（只要「好/坏」二进制标签，用 `ultrafeedback-binarized-preferences-cleaned-kto`，不需要成对比较）
+- `rl/rl_rm_2gpu.sh`：两卡 DDP **Reward Model**（同一份偏好数据训打分器，`center_rewards_coefficient 0.01`；产物是 value head 打分模型，供 PPO 的 `--reward_model` 用）
 - `rl/rl_grpo_2gpu.sh`：两卡 DDP GRPO（LoRA，gsm8k + accuracy reward，native rollout）
 - `rl/rl_grpo_ds_2gpu.sh`：两卡 **DeepSpeed ZeRO-2** GRPO
+
+算法谱系速记：**离线偏好**（DPO / ORPO / SimPO / CPO，喂 chosen+rejected）→ **离线标签**（KTO，只喂好/坏）→ **打分器**（RM，产出 reward 模型）→ **在线采样**（PPO / GRPO，模型自己生成再由 reward 打分）。`--rlhf_type ppo` 需要额外 `--reward_model`（本仓库暂无可用 checkpoint，未写脚本）；`--rlhf_type gkd` 需要 teacher model（未写脚本）。
 
 ### 3.4 cpt/（9 个，多模态图文 CPT）
 
@@ -149,8 +156,15 @@ experiments/
 | Gemma4 官方模型卡样例（modelscope API） | ✅ 1 号卡跑通（E2B 权重）；图文样例 prompt 274 token、生成 186 token / 7.5s，正确识别 GoldenGate 桥；纯文本样例 28 token → 28 token / 2.3s；`parse_response` 均返回 `{'role': 'assistant', 'content': ...}` |
 | PT 纯文本 demo（`pt/pt_text_demo.sh`） | ✅ Qwen3-0.6B，10 条语料 3 epoch = 30/30 步，8s，train_loss 3.941，eval_loss 4.564→**4.414**，token_acc 0.25→0.51，显存 1.58 GiB |
 | CPT 图文 demo（`cpt/cpt_vl_demo.sh`） | ✅ Gemma4-E2B，8 条图文 2 epoch / 8 步，10.3s，train_loss 4.104，eval_loss 5.773→**5.428**，显存 10.75 GiB，无 `IndexError`（`<image>` 占位与图片索引均正确） |
+| RL ORPO（`rl/rl_orpo_2gpu.sh`） | ✅ 20/20 步，60.7s，train_loss 1.666，14.42 GiB；`nll_loss`/`log_odds_ratio` 指标正常，无 ref model |
+| RL SimPO（`rl/rl_simpo_2gpu.sh`） | ✅ 20/20 步，61.6s，train_loss 3.43，14.42 GiB；`rewards/margins` 在 ±0.3 附近抖动 |
+| RL CPO（`rl/rl_cpo_2gpu.sh`） | ✅ 20/20 步，60.4s，train_loss 7.826（含 NLL 项，量级偏大属正常），14.42 GiB |
+| RL KTO（`rl/rl_kto_2gpu.sh`） | ✅ 20/20 步，50.4s，train_loss 0.472，12.83 GiB；367 条有效样本（`label` true/false），`rewards/margins` 0.28~0.56 |
+| RL Reward Model（`rl/rl_rm_2gpu.sh`） | ✅ 20/20 步，44.1s，train_loss 0.616，**1.94 GiB**；`rewards/accuracies` 0.875，`rewards/margins` 0.39~0.83（chosen 稳定高于 rejected） |
 
-产物目录：`experiments/output/sft/`、`experiments/output/rl_dpo/`（v5 为最终成功版本）、`experiments/output/rl_grpo/`（v2 为最终成功版本）、`experiments/output/sft_tp/`、`experiments/output/cpt-gemma4-1gpu/`。
+> 以上 5 个 RL 脚本都是**跑通性冒烟**（`max_steps 20`、400 条样本），只证明算法链路、数据映射和显存可以跑，不代表效果。ORPO/SimPO/CPO 在 20 步内 margin 仍在 0 附近抖动，要看收敛得把 `max_steps` 提到 100+。
+
+产物目录：`experiments/output/sft/`、`experiments/output/rl_dpo/`（v5 为最终成功版本）、`experiments/output/rl_grpo/`（v2 为最终成功版本）、`experiments/output/sft_tp/`、`experiments/output/cpt-gemma4-1gpu/`、`experiments/output/rl_{orpo,simpo,cpo,kto,rm}/`。
 
 ## 5. 注意事项（踩坑记录）
 
@@ -185,6 +199,11 @@ python experiments/datasets/make_demo_pt_cpt.py  # 重新生成 demo 数据（�
 # 文本训练
 bash experiments/sft/sft_2gpu.sh              # SFT（DDP）
 bash experiments/rl/rl_dpo_2gpu.sh            # RL DPO
+bash experiments/rl/rl_orpo_2gpu.sh           # RL ORPO（无 ref model）
+bash experiments/rl/rl_simpo_2gpu.sh          # RL SimPO（无 ref model，beta 2.0）
+bash experiments/rl/rl_cpo_2gpu.sh            # RL CPO（偏好项 + SFT 项）
+bash experiments/rl/rl_kto_2gpu.sh            # RL KTO（二进制标签）
+bash experiments/rl/rl_rm_2gpu.sh             # Reward Model（打分器，供 PPO 用）
 bash experiments/rl/rl_grpo_2gpu.sh           # RL GRPO
 bash experiments/sft/sft_ds_zero2_2gpu.sh     # SFT（ZeRO-2）
 bash experiments/sft/sft_megatron_tp_2gpu.sh  # SFT（Megatron TP）
