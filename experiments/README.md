@@ -200,7 +200,8 @@ experiments/
 18. **Qwen3.5 的 model_type / template 自动匹配都有歧义**：`--model_type` 报 `['qwen3_5','ovis_ocr2','qwen3_5_emb','wemm_embedding']`，`--template` 报 `['qwen3_5','qwen3_8']`，两者都必须显式传 `qwen3_5`。
 19. **`text` + `images` 结构里 text 不能写 `<image>` 占位符**：图片位置由 `images` 字段决定，框架自己插 image pad；写了占位符会重复计数。
 20. **`{"text":…, "images":[…]}` 确实能零 role**：实测序列解码为 `<|image>` + 256 个 image pad token + 正文 + `<eos>`，无 `<start_of_turn>`；Qwen3.5 纯文本为正文 + `<|im_end|>`，无 `<|im_start|>user`。验证脚本思路见日志：从训练日志取出 `[INPUT_IDS]` 再 `tokenizer.decode`。
-21. **`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` 会让 Gemma4 双卡直接死在加载阶段**（本次最反直觉的一条，纠正了此前「WSL 双卡跑 Gemma4 必然 `device not ready`」的结论）：带这个变量时，Gemma4 双卡 DDP 在模型加载阶段两个 rank 都报 `CUDA driver error: device not ready`，且日志出现 `model_kwargs: {'device_map': 'cuda:0'}`；**同一组参数去掉这一行后立刻跑通**（纯文本、图文都跑了 2/2 和完整 10/10、8/8 步）。Qwen 侧带不带的都能跑，说明是 Gemma4 与 expandable_segments 的交互问题。因此 `pt/` 下 5 个脚本都不再设该变量。
+21. **`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` 会让 Gemma4 双卡直接死在加载阶段**（本次最反直觉的一条，纠正了此前「WSL 双卡跑 Gemma4 必然 `device not ready`」的结论）：带这个变量时，Gemma4 双卡 DDP 在模型加载阶段两个 rank 都报 `CUDA driver error: device not ready`，且日志出现 `model_kwargs: {'device_map': 'cuda:0'}`；**同一组参数去掉这一行后立刻跑通**（纯文本、图文都跑了 2/2 和完整 10/10、8/8 步）。Qwen 侧带不带的都能跑，说明是 Gemma4 与 expandable_segments 的交互问题。因此全部训练脚本都不再设该变量。
+22. **不要用 `sed -i "s/\r//"` 去 CRLF**：在本机这套 PowerShell → `wsl -d ... bash -c` 的调用链路里，它会被当成「删除所有字母 r」执行，把 `experiments` 变成 `expeiments`、`rl/` 变成 `l/`、`/root` 变成 `/oot`、`megatron` 变成 `megaton`、`start` 变成 `stat`。项目目录里那份 README 副本就是这么被写坏的（所有 r 消失），已用最新版覆盖修复。要处理行尾先用 `file f` 确认是否真有 CR，真有就用 `tr -d '\r' < f > f2` 或 `dos2unix`，绝不用 `sed` 删 `\r`。
 
 ## 6. 日常使用
 
