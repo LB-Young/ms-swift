@@ -87,13 +87,15 @@ experiments/
 
 ## 3. 脚本（按目录分类）
 
-### 3.1 pt/（5 个，PT/CPT demo：text + images 结构）
+### 3.1 pt/（5 个，PT/CPT demo：text + images 结构，**全部双卡 DDP**）
 
 - `pt/pt_text_demo.sh`：纯文本 PT 最小 demo（Qwen3-0.6B + `{"text": ...}` 语料；`--use_chat_template false --loss_scale all`，不套模板、全 token 算 loss）
-- `pt/pt_text_gemma4_1gpu.sh`：纯文本 PT（Gemma4-E2B，10 条语料 2 epoch）
-- `pt/pt_text_qwen35_1gpu.sh`：纯文本 PT（Qwen3.5-0.8B，比 Qwen3-0.6B 更新；**必须显式** `--model_type qwen3_5 --template qwen3_5`，否则自动匹配有歧义报错）
-- `pt/cpt_text_images_gemma4_1gpu.sh`：图文 CPT（Gemma4-E2B，`{"text","images"}` 无 role，`freeze_vit/aligner`）
-- `pt/cpt_text_images_qwen3vl_1gpu.sh`：图文 CPT（Qwen3-VL-2B-Instruct，同样无 role；template 由框架自动匹配）
+- `pt/pt_text_gemma4_2gpu.sh`：纯文本 PT（Gemma4-E2B，10 条语料 2 epoch）
+- `pt/pt_text_qwen35_2gpu.sh`：纯文本 PT（Qwen3.5-0.8B，比 Qwen3-0.6B 更新；**必须显式** `--model_type qwen3_5 --template qwen3_5`，否则自动匹配有歧义报错）
+- `pt/cpt_text_images_gemma4_2gpu.sh`：图文 CPT（Gemma4-E2B，`{"text","images"}` 无 role，`freeze_vit/aligner`）
+- `pt/cpt_text_images_qwen3vl_2gpu.sh`：图文 CPT（Qwen3-VL-2B-Instruct，同样无 role；template 由框架自动匹配）
+
+> 全部脚本统一 `CUDA_VISIBLE_DEVICES=0,1` + `NPROC_PER_NODE=2`，且**不再设 `PYTORCH_CUDA_ALLOC_CONF`**（原因见踩坑 21）。
 
 ### 3.2 sft/（13 个，文本 SFT）
 
@@ -120,14 +122,13 @@ experiments/
 
 算法谱系速记：**离线偏好**（DPO / ORPO / SimPO / CPO，喂 chosen+rejected）→ **离线标签**（KTO，只喂好/坏）→ **打分器**（RM，产出 reward 模型）→ **在线采样**（PPO / GRPO，模型自己生成再由 reward 打分）。`--rlhf_type ppo` 需要额外 `--reward_model`（本仓库暂无可用 checkpoint，未写脚本）；`--rlhf_type gkd` 需要 teacher model（未写脚本）。
 
-### 3.4 cpt/（9 个，多模态图文 CPT）
+### 3.4 cpt/（8 个，多模态图文 CPT，Gemma4 侧全部双卡）
 
-- `cpt/cpt_vl_demo.sh`：**最小可跑 demo**（Gemma4-E2B + 8 条 mock 图文，2 epoch / 8 步，10.3s，10.75 GiB；验证 `images` 字段与 `<image>` 占位）
+- `cpt/cpt_vl_demo.sh`：**最小可跑 demo**（Gemma4-E2B 双卡 DDP + 8 条 mock 图文，2 epoch / 8 步，6.5s，15.03 GiB；验证 `images` 字段与 `<image>` 占位）
 - `cpt/cpt_vl_2gpu.sh`：两卡多模态 CPT（Qwen2-VL-2B-Instruct + mock 图文集；`swift pt` + `--use_chat_template false --loss_scale all`，LoRA，冻结 ViT/aligner）
 - `cpt/cpt_vl_infer.sh`：Qwen 版 CPT adapter 推理（`swift infer --adapters <ckpt>`）
 - `cpt/make_mock_vl_cpt.py`：mock 图文集生成器（8 类图，64 训练 + 8 验证 = 72 张 512px PNG，同 seed 数值对齐）
-- `cpt/cpt_gemma4_1gpu.sh`：Gemma4-E2B 单卡 CPT（**已跑通**，16/16 步）
-- `cpt/cpt_gemma4_2gpu.sh`：Gemma4 双卡（WSL 下 `device not ready`，**未跑通，留档**）
+- `cpt/cpt_gemma4_2gpu.sh`：Gemma4-E2B 双卡 CPT（**已跑通**，32/32 步，train_loss 2.395，eval_loss 1.381，15.03 GiB/卡）
 - `cpt/cpt_gemma4_infer.sh`：Gemma4 CLI 推理（需 `swift/model/models/gemma.py` 适配层补丁，坑 14/15）
 - `cpt/start_cpt_vl.sh` / `cpt/start_cpt_gemma4.sh`：后台启动包装（setsid + 打印首屏日志）
 
@@ -157,16 +158,16 @@ experiments/
 | SFT 4B 双卡 DS ZeRO-2 (LoRA) | ✅ 20/20 步，train_loss 1.725，9.53GB/卡；checkpoint-20 已存（WSL 扩容 24GB 后跑通） |
 | 4B ZeRO 矩阵（nods/zero0/1/2/3） | ✅ 5 策略全跑通 10/10 步，loss 2.18~2.22，8.5~8.8GB；纯 DDP 最快 16.9s，zero3 最慢 152s；offload×2 因 CPUAdam 需 nvcc 失败 |
 | 多模态 CPT（Qwen2-VL-2B + 图文集） | ✅ 16/16 步，train_loss 2.86→**1.95**，train_loss 均值 2.151，eval_loss 1.956，token_acc 0.44→0.60，**5.24GB/卡**，22s；推理 8/8 张图，图表数值/占比与 GT 高度一致 |
-| 多模态 CPT（Gemma4-E2B + 图文集，单卡） | ✅ 16/16 步，train_loss 3.685，**10.75GiB**，30.6s（2.09 samples/s）；推理 8/8 张图全部正确识别并描述（图表类型/数值/布局与图像一致）；双卡在 WSL 下受 `device not ready`（GPU mapping）限制无法跑 |
+| 多模态 CPT（Gemma4-E2B + 图文集，单卡） | ✅ 16/16 步，train_loss 3.685，**10.75GiB**，30.6s（2.09 samples/s）；推理 8/8 张图全部正确识别并描述（图表类型/数值/布局与图像一致）；双卡见下方 `pt/` 四个脚本（去掉 `PYTORCH_CUDA_ALLOC_CONF` 后可跑） |
 | Gemma4 纯 transformers 推理 | ✅ 1 号卡跑通；bar_00 输出 48/76/106/84、pie_02 输出 13/31/38/18，与 mock GT 完全一致 |
 | Gemma4 纯 transformers 推理（内置架构图） | ✅ 不传 `--image` 直接读笔记里的 Gemma-1 解码层架构图，正确复述 `hidden states (b,s,2048)`、`RMSNorm eps 1e-6`、`q/k/v_proj 2048→8*256 / 1*256`、`RoPE`、`input layernorm` |
 | Gemma4 官方模型卡样例（modelscope API） | ✅ 1 号卡跑通（E2B 权重）；图文样例 prompt 274 token、生成 186 token / 7.5s，正确识别 GoldenGate 桥；纯文本样例 28 token → 28 token / 2.3s；`parse_response` 均返回 `{'role': 'assistant', 'content': ...}` |
-| PT 纯文本 demo（`pt/pt_text_demo.sh`） | ✅ Qwen3-0.6B，10 条语料 3 epoch = 30/30 步，8s，train_loss 3.941，eval_loss 4.564→**4.414**，token_acc 0.25→0.51，显存 1.58 GiB |
-| CPT 图文 demo（`cpt/cpt_vl_demo.sh`） | ✅ Gemma4-E2B，8 条图文 2 epoch / 8 步，10.3s，train_loss 4.104，eval_loss 5.773→**5.428**，显存 10.75 GiB，无 `IndexError`（`<image>` 占位与图片索引均正确） |
-| 纯文本 PT（`pt/pt_text_gemma4_1gpu.sh`） | ✅ Gemma4-E2B，10 条 2 epoch = 20/20 步，8.9s，train_loss 8.2，eval_loss **7.121**，显存 10.43 GiB |
-| 纯文本 PT（`pt/pt_text_qwen35_1gpu.sh`） | ✅ Qwen3.5-0.8B，20/20 步，11.3s，train_loss 3.725，eval_loss **4.172**，显存 **2.28 GiB** |
-| 图文 CPT 无 role（`pt/cpt_text_images_gemma4_1gpu.sh`） | ✅ Gemma4-E2B，8 条 2 epoch / 8 步，8.95s，train_loss 4.832，eval_loss **6.219**，10.61 GiB；序列解码为 `<|image>`+image pad+正文+`<eos>`，**零 role 标记**，`images_dir` 已生成 |
-| 图文 CPT 无 role（`pt/cpt_text_images_qwen3vl_1gpu.sh`） | ✅ Qwen3-VL-2B-Instruct，8/8 步，9.07s，train_loss 1.871，eval_loss **2.813**，4.63 GiB；token_acc 0.42→0.67 |
+| PT 纯文本 demo（`pt/pt_text_demo.sh`） | ✅ 双卡 DP2，Qwen3-0.6B，10 条语料 3 epoch = 15/15 步，4.5s，train_loss 4.099，eval_loss **4.570**，token_acc 0.32，1.75 GiB/卡 |
+| CPT 图文 demo（`cpt/cpt_vl_demo.sh`） | ✅ **双卡 DP2**，Gemma4-E2B，8 条图文 2 epoch / 8 步，6.5s，train_loss 4.108，eval_loss 5.741→**5.387**，显存 15.03 GiB/卡，无 `IndexError`（`<image>` 占位与图片索引均正确） |
+| 纯文本 PT（`pt/pt_text_gemma4_2gpu.sh`） | ✅ **双卡 DP2**，Gemma4-E2B，10 条 2 epoch = 10/10 步，6.0s，train_loss 9.458，eval_loss **9.061**，15.03 GiB/卡，无 `device not ready` |
+| 纯文本 PT（`pt/pt_text_qwen35_2gpu.sh`） | ✅ **双卡 DP2**，Qwen3.5-0.8B，10/10 步，6.0s，train_loss 3.863，eval_loss **4.348**，**2.67 GiB/卡** |
+| 图文 CPT 无 role（`pt/cpt_text_images_gemma4_2gpu.sh`） | ✅ **双卡 DP2**，Gemma4-E2B，8 条 2 epoch / 8 步，6.1s，train_loss 4.847，eval_loss **6.244**，15.03 GiB/卡，无 OOM；序列解码为 `<|image>`+image pad+正文+`<eos>`，**零 role 标记** |
+| 图文 CPT 无 role（`pt/cpt_text_images_qwen3vl_2gpu.sh`） | ✅ **双卡 DP2**，Qwen3-VL-2B-Instruct，8/8 步，4.4s，train_loss 1.872，eval_loss **2.808**，5.72 GiB/卡；token_acc 0.42 |
 | RL ORPO（`rl/rl_orpo_2gpu.sh`） | ✅ 20/20 步，60.7s，train_loss 1.666，14.42 GiB；`nll_loss`/`log_odds_ratio` 指标正常，无 ref model |
 | RL SimPO（`rl/rl_simpo_2gpu.sh`） | ✅ 20/20 步，61.6s，train_loss 3.43，14.42 GiB；`rewards/margins` 在 ±0.3 附近抖动 |
 | RL CPO（`rl/rl_cpo_2gpu.sh`） | ✅ 20/20 步，60.4s，train_loss 7.826（含 NLL 项，量级偏大属正常），14.42 GiB |
@@ -199,6 +200,7 @@ experiments/
 18. **Qwen3.5 的 model_type / template 自动匹配都有歧义**：`--model_type` 报 `['qwen3_5','ovis_ocr2','qwen3_5_emb','wemm_embedding']`，`--template` 报 `['qwen3_5','qwen3_8']`，两者都必须显式传 `qwen3_5`。
 19. **`text` + `images` 结构里 text 不能写 `<image>` 占位符**：图片位置由 `images` 字段决定，框架自己插 image pad；写了占位符会重复计数。
 20. **`{"text":…, "images":[…]}` 确实能零 role**：实测序列解码为 `<|image>` + 256 个 image pad token + 正文 + `<eos>`，无 `<start_of_turn>`；Qwen3.5 纯文本为正文 + `<|im_end|>`，无 `<|im_start|>user`。验证脚本思路见日志：从训练日志取出 `[INPUT_IDS]` 再 `tokenizer.decode`。
+21. **`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` 会让 Gemma4 双卡直接死在加载阶段**（本次最反直觉的一条，纠正了此前「WSL 双卡跑 Gemma4 必然 `device not ready`」的结论）：带这个变量时，Gemma4 双卡 DDP 在模型加载阶段两个 rank 都报 `CUDA driver error: device not ready`，且日志出现 `model_kwargs: {'device_map': 'cuda:0'}`；**同一组参数去掉这一行后立刻跑通**（纯文本、图文都跑了 2/2 和完整 10/10、8/8 步）。Qwen 侧带不带的都能跑，说明是 Gemma4 与 expandable_segments 的交互问题。因此 `pt/` 下 5 个脚本都不再设该变量。
 
 ## 6. 日常使用
 
@@ -208,12 +210,12 @@ conda activate ms-swift
 cd /root/ms-swift
 
 # 预训练 demo（PT / CPT，各 10 秒内跑完）
-bash experiments/pt/pt_text_demo.sh                 # 纯文本 PT demo（Qwen3-0.6B，30 步 8s）
+bash experiments/pt/pt_text_demo.sh                 # 纯文本 PT demo（Qwen3-0.6B 双卡，15 步 5s）
 bash experiments/cpt/cpt_vl_demo.sh                 # 图文 CPT demo（Gemma4-E2B，messages 旧格式，8 步 10s）
-bash experiments/pt/pt_text_gemma4_1gpu.sh          # 纯文本 PT（Gemma4-E2B，text 结构）
-bash experiments/pt/pt_text_qwen35_1gpu.sh          # 纯文本 PT（Qwen3.5-0.8B，text 结构）
-bash experiments/pt/cpt_text_images_gemma4_1gpu.sh  # 图文 CPT（Gemma4-E2B，text+images 无 role）
-bash experiments/pt/cpt_text_images_qwen3vl_1gpu.sh # 图文 CPT（Qwen3-VL-2B，text+images 无 role）
+bash experiments/pt/pt_text_gemma4_2gpu.sh          # 纯文本 PT（Gemma4-E2B，双卡 text 结构）
+bash experiments/pt/pt_text_qwen35_2gpu.sh          # 纯文本 PT（Qwen3.5-0.8B，双卡 text 结构）
+bash experiments/pt/cpt_text_images_gemma4_2gpu.sh  # 图文 CPT（Gemma4-E2B，双卡 text+images 无 role）
+bash experiments/pt/cpt_text_images_qwen3vl_2gpu.sh # 图文 CPT（Qwen3-VL-2B，双卡 text+images 无 role）
 python experiments/datasets/make_demo_pt_cpt.py     # 重新生成 messages 版 demo 数据（可选）
 python experiments/datasets/make_demo_text_images.py # 生成 text/images 版 + 纯文本版数据（可选）
 
@@ -231,7 +233,7 @@ bash experiments/sft/sft_megatron_tp_2gpu.sh  # SFT（Megatron TP）
 
 # 多模态 CPT
 bash experiments/cpt/cpt_vl_2gpu.sh           # Qwen2-VL-2B 双卡
-bash experiments/cpt/cpt_gemma4_1gpu.sh       # Gemma4-E2B 单卡
+bash experiments/cpt/cpt_gemma4_2gpu.sh       # Gemma4-E2B 双卡
 python experiments/cpt/make_mock_vl_cpt.py    # 重新生成 mock 图文集（可选）
 
 # 推理 / 调试

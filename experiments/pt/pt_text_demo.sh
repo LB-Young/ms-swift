@@ -9,9 +9,8 @@ BASE=/root/ms-swift/experiments
 DS=$BASE/datasets/demo_pt_cpt
 OUT=$BASE/output/pt-text-demo
 
-CUDA_VISIBLE_DEVICES=0 \
-NPROC_PER_NODE=1 \
-PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+CUDA_VISIBLE_DEVICES=0,1 \
+NPROC_PER_NODE=2 \
 swift pt \
   --model /mnt/e/models/models/Qwen/Qwen3-0___6B \
   --dataset $DS/pt_train.jsonl \

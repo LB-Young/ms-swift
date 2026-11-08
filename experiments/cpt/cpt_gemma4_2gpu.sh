@@ -1,10 +1,9 @@
 #!/bin/bash
-# CPT (Continued Pre-Training) on multimodal data with Gemma4 E2B (vision+audio towers).
-# Same CPT semantics as cpt_vl_2gpu.sh: `swift pt` + use_chat_template=False + loss_scale='all'.
-# Gemma4 template uses <|image|> placeholder -> dataset gemma4_cpt_*.jsonl.
-# 运行：cd /root/ms-swift && bash experiments/cpt/cpt_gemma4_2gpu.sh
-# 注意：Gemma4 双卡在 WSL 下报 `CUDA driver error: device not ready`，本脚本未跑通，留档
+# 用途：Gemma4-E2B 双卡 DDP 多模态图文 CPT（mock 图文集；LoRA r8/alpha16；冻结 ViT+aligner）
+# 要点：swift pt + use_chat_template true + loss_scale all（全 token 算 loss）
+# 注意：不要设 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True——Gemma4 双卡会在加载阶段报 device not ready
 # 输出：experiments/output/cpt-gemma4-2gpu
+# 运行：cd /root/ms-swift && bash experiments/cpt/cpt_gemma4_2gpu.sh
 set -e
 
 export HOME=/root
@@ -28,7 +27,6 @@ echo "[CPT-Gemma4] out   : $OUT"
 
 CUDA_VISIBLE_DEVICES=0,1 \
 NPROC_PER_NODE=2 \
-PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 $SWIFT pt \
   --model "$MODEL" \
   --template gemma4_nothinking \
@@ -40,7 +38,7 @@ $SWIFT pt \
   --torch_dtype bfloat16 \
   --num_train_epochs 2 \
   --per_device_train_batch_size 1 \
-  --gradient_accumulation_steps 4 \
+  --gradient_accumulation_steps 2 \
   --learning_rate 1e-4 \
   --max_length 1024 \
   --freeze_vit true \
